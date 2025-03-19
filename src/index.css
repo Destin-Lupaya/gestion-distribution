@@ -1,0 +1,126 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --primary: #2563eb;
+  --primary-light: #60a5fa;
+  --primary-dark: #1d4ed8;
+  --secondary: #4f46e5;
+  --success: #22c55e;
+  --error: #ef4444;
+  --background: #f8fafc;
+  --text-primary: #1e293b;
+  --text-secondary: #64748b;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background-color: var(--background);
+  color: var(--text-primary);
+}
+
+.signature-canvas {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 8px;
+  background-color: white;
+  touch-action: none;
+}
+
+.card-hover {
+  transition: all 0.2s ease-in-out;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+}
+
+.gradient-bg {
+  background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #94a3b8;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #64748b;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-in-out;
+}
+
+/* Table styles */
+.MuiTableContainer-root {
+  border-radius: 12px;
+  box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1);
+}
+
+.MuiTableRow-root:hover {
+  background-color: #f8fafc;
+}
+
+/* Form styles */
+.MuiOutlinedInput-root {
+  transition: all 0.2s ease-in-out;
+}
+
+.MuiOutlinedInput-root:hover {
+  background-color: #f8fafc;
+}
+
+/* Button styles */
+.MuiButton-contained {
+  text-transform: none;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.MuiButton-outlined {
+  border-width: 1.5px;
+}
+
+/* Alert styles */
+.MuiAlert-root {
+  border-radius: 8px;
+  font-weight: 500;
+}
+
+/* Chip styles */
+.MuiChip-root {
+  font-weight: 500;
+  height: 28px;
+}
+
+/* Card styles */
+.MuiCard-root {
+  transition: all 0.2s ease-in-out;
+}
