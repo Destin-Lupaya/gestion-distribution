@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Paper, 
   Typography,
@@ -18,7 +18,10 @@ import {
   TextField,
   MenuItem,
   IconButton,
-  Tooltip
+  Tooltip,
+  CircularProgress,
+  Skeleton,
+  Alert
 } from '@mui/material';
 import {
   Chart as ChartJS,
@@ -38,8 +41,11 @@ import dayjs from 'dayjs';
 import 'dayjs/locale/fr';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import FilterListIcon from '@mui/icons-material/FilterList';
+import RefreshIcon from '@mui/icons-material/Refresh';
 import jsPDF from 'jspdf';
 import 'jspdf-autotable';
+import { typedSupabase } from '../lib/supabase';
+import toast from 'react-hot-toast';
 
 ChartJS.register(
   CategoryScale,
@@ -55,6 +61,31 @@ interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
   value: number;
+}
+
+interface ReportData {
+  totalMenages: number;
+  totalBeneficiaires: number;
+  tauxDistribution: number;
+  tonnageTotal: number;
+  distributionParStatut: {
+    deplaces: number;
+    retournes: number;
+  };
+  distributionParCategorie: {
+    enfants: number;
+    adultes: number;
+    personnesAgees: number;
+  };
+  tonnageDistribue: number;
+  tonnageRestant: number;
+  absents: Array<{
+    id: string;
+    nom: string;
+    prenom: string;
+    localite: string;
+    raison: string;
+  }>;
 }
 
 function TabPanel(props: TabPanelProps) {
@@ -78,10 +109,90 @@ function TabPanel(props: TabPanelProps) {
 
 function DistributionReport() {
   const [tabValue, setTabValue] = useState(0);
-  const [startDate, setStartDate] = useState<dayjs.Dayjs | null>(dayjs());
+  const [startDate, setStartDate] = useState<dayjs.Dayjs | null>(dayjs().subtract(7, 'day'));
   const [endDate, setEndDate] = useState<dayjs.Dayjs | null>(dayjs());
   const [selectedLocalite, setSelectedLocalite] = useState('all');
   const [selectedStatut, setSelectedStatut] = useState('all');
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [reportData, setReportData] = useState<ReportData | null>(null);
+
+  useEffect(() => {
+    fetchReportData();
+  }, [startDate, endDate, selectedLocalite, selectedStatut]);
+
+  const fetchReportData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      // Fetch all required data in parallel
+      const [
+        { data: menages, error: menagesError },
+        { data: distributions, error: distributionsError },
+        { data: beneficiaires, error: beneficiairesError }
+      ] = await Promise.all([
+        typedSupabase
+          .from('menages')
+          .select('*, sites_distribution!inner(*)'),
+        typedSupabase
+          .from('distributions')
+          .select('*')
+          .gte('date_distribution', startDate?.toISOString())
+          .lte('date_distribution', endDate?.toISOString()),
+        typedSupabase
+          .from('beneficiaires')
+          .select('*')
+      ]);
+
+      if (menagesError) throw menagesError;
+      if (distributionsError) throw distributionsError;
+      if (beneficiairesError) throw beneficiairesError;
+
+      // Calculate statistics
+      const totalMenages = menages?.length || 0;
+      const totalBeneficiaires = menages?.reduce((sum, m) => sum + m.nombre_beneficiaires, 0) || 0;
+      const distributionsCount = distributions?.length || 0;
+      const tauxDistribution = totalMenages > 0 ? (distributionsCount / totalMenages) * 100 : 0;
+
+      // Assuming 50kg per beneficiary for tonnage calculation
+      const tonnageParBeneficiaire = 0.05; // 50kg = 0.05 tonnes
+      const tonnageTotal = totalBeneficiaires * tonnageParBeneficiaire;
+      const tonnageDistribue = distributionsCount * tonnageParBeneficiaire;
+
+      // Mock data for demonstration (replace with real data when available)
+      const reportData: ReportData = {
+        totalMenages,
+        totalBeneficiaires,
+        tauxDistribution,
+        tonnageTotal,
+        distributionParStatut: {
+          deplaces: Math.round(totalMenages * 0.65),
+          retournes: Math.round(totalMenages * 0.35)
+        },
+        distributionParCategorie: {
+          enfants: Math.round(totalBeneficiaires * 0.35),
+          adultes: Math.round(totalBeneficiaires * 0.55),
+          personnesAgees: Math.round(totalBeneficiaires * 0.10)
+        },
+        tonnageDistribue,
+        tonnageRestant: tonnageTotal - tonnageDistribue,
+        absents: [
+          { id: '001', nom: 'Diallo', prenom: 'Amadou', localite: 'Zone A', raison: 'Non localisé' },
+          { id: '002', nom: 'Touré', prenom: 'Fatima', localite: 'Zone B', raison: 'Déplacé' },
+          { id: '003', nom: 'Koné', prenom: 'Ibrahim', localite: 'Zone C', raison: 'Malade' }
+        ]
+      };
+
+      setReportData(reportData);
+    } catch (error) {
+      console.error('Error fetching report data:', error);
+      setError('Erreur lors du chargement des données');
+      toast.error('Erreur lors du chargement des données');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -90,13 +201,15 @@ function DistributionReport() {
   const localites = ['Toutes les localités', 'Zone A', 'Zone B', 'Zone C', 'Zone D', 'Zone E'];
   const statuts = ['Tous les statuts', 'Déplacés', 'Retournés'];
 
-  // Données pour le graphique de distribution par statut
   const statusChartData = {
     labels: ['Déplacés', 'Retournés'],
     datasets: [
       {
         label: 'Nombre de ménages',
-        data: [65, 35],
+        data: reportData ? [
+          reportData.distributionParStatut.deplaces,
+          reportData.distributionParStatut.retournes
+        ] : [0, 0],
         backgroundColor: ['rgba(54, 162, 235, 0.5)', 'rgba(255, 99, 132, 0.5)'],
         borderColor: ['rgba(54, 162, 235, 1)', 'rgba(255, 99, 132, 1)'],
         borderWidth: 1,
@@ -104,12 +217,14 @@ function DistributionReport() {
     ],
   };
 
-  // Données pour le graphique de tonnage
   const tonnageChartData = {
     labels: ['Distribué', 'Restant'],
     datasets: [
       {
-        data: [75, 25],
+        data: reportData ? [
+          reportData.tonnageDistribue,
+          reportData.tonnageRestant
+        ] : [0, 0],
         backgroundColor: ['rgba(75, 192, 192, 0.5)', 'rgba(255, 206, 86, 0.5)'],
         borderColor: ['rgba(75, 192, 192, 1)', 'rgba(255, 206, 86, 1)'],
         borderWidth: 1,
@@ -117,14 +232,9 @@ function DistributionReport() {
     ],
   };
 
-  // Données exemple pour les tableaux
-  const absenteesList = [
-    { id: '001', nom: 'Diallo', prenom: 'Amadou', localite: 'Zone A', raison: 'Non localisé' },
-    { id: '002', nom: 'Touré', prenom: 'Fatima', localite: 'Zone B', raison: 'Déplacé' },
-    { id: '003', nom: 'Koné', prenom: 'Ibrahim', localite: 'Zone C', raison: 'Malade' },
-  ];
-
   const exportToPDF = () => {
+    if (!reportData) return;
+
     const doc = new jsPDF();
     
     // Titre
@@ -137,14 +247,14 @@ function DistributionReport() {
     
     // Statistiques globales
     doc.text('Statistiques Globales:', 20, 40);
-    doc.text(`Total Ménages: 250`, 30, 50);
-    doc.text(`Total Bénéficiaires: 1250`, 30, 60);
-    doc.text(`Taux de Distribution: 95%`, 30, 70);
-    doc.text(`Tonnage Total: 25T`, 30, 80);
+    doc.text(`Total Ménages: ${reportData.totalMenages}`, 30, 50);
+    doc.text(`Total Bénéficiaires: ${reportData.totalBeneficiaires}`, 30, 60);
+    doc.text(`Taux de Distribution: ${reportData.tauxDistribution.toFixed(1)}%`, 30, 70);
+    doc.text(`Tonnage Total: ${reportData.tonnageTotal.toFixed(1)}T`, 30, 80);
     
     // Liste des absents
     doc.text('Liste des Absents:', 20, 100);
-    const absentsData = absenteesList.map(absent => [
+    const absentsData = reportData.absents.map(absent => [
       absent.id,
       absent.nom,
       absent.prenom,
@@ -215,20 +325,51 @@ function DistributionReport() {
           </TextField>
         </Grid>
         <Grid item xs={12} md={2}>
-          <Tooltip title="Exporter en PDF">
-            <IconButton onClick={exportToPDF} color="primary">
-              <FileDownloadIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Filtrer">
-            <IconButton color="primary">
-              <FilterListIcon />
-            </IconButton>
-          </Tooltip>
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <span>
+              <Tooltip title="Exporter en PDF">
+                <span>
+                  <IconButton 
+                    onClick={exportToPDF} 
+                    color="primary"
+                    disabled={isLoading || !reportData}
+                  >
+                    <FileDownloadIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </span>
+            <span>
+              <Tooltip title="Actualiser">
+                <span>
+                  <IconButton 
+                    onClick={fetchReportData} 
+                    color="primary"
+                    disabled={isLoading}
+                  >
+                    <RefreshIcon />
+                  </IconButton>
+                </span>
+              </Tooltip>
+            </span>
+            <Tooltip title="Filtrer">
+              <IconButton color="primary">
+                <FilterListIcon />
+              </IconButton>
+            </Tooltip>
+          </Box>
         </Grid>
       </Grid>
     </Paper>
   );
+
+  if (error) {
+    return (
+      <Alert severity="error" sx={{ mt: 2 }}>
+        {error}
+      </Alert>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -238,7 +379,18 @@ function DistributionReport() {
 
       <FilterBar />
 
-      <Tabs value={tabValue} onChange={handleTabChange} variant="fullWidth">
+      <Tabs 
+        value={tabValue} 
+        onChange={handleTabChange} 
+        variant="fullWidth"
+        sx={{
+          '& .MuiTab-root': {
+            minHeight: 64,
+            fontSize: '0.9rem',
+            fontWeight: 500
+          }
+        }}
+      >
         <Tab label="Rapport Global" />
         <Tab label="Distribution par Ménages" />
         <Tab label="Bénéficiaires" />
@@ -252,72 +404,124 @@ function DistributionReport() {
           <Grid item xs={12} md={3}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Total Ménages</Typography>
-                <Typography variant="h3">250</Typography>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Total Ménages
+                </Typography>
+                {isLoading ? (
+                  <Skeleton variant="text" height={48} />
+                ) : (
+                  <Typography variant="h3" component="div">
+                    {reportData?.totalMenages.toLocaleString()}
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={3}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Total Bénéficiaires</Typography>
-                <Typography variant="h3">1250</Typography>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Total Bénéficiaires
+                </Typography>
+                {isLoading ? (
+                  <Skeleton variant="text" height={48} />
+                ) : (
+                  <Typography variant="h3" component="div">
+                    {reportData?.totalBeneficiaires.toLocaleString()}
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={3}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Taux de Distribution</Typography>
-                <Typography variant="h3">95%</Typography>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Taux de Distribution
+                </Typography>
+                {isLoading ? (
+                  <Skeleton variant="text" height={48} />
+                ) : (
+                  <Typography variant="h3" component="div">
+                    {reportData?.tauxDistribution.toFixed(1)}%
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={3}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Tonnage Total</Typography>
-                <Typography variant="h3">25T</Typography>
+                <Typography variant="h6" color="text.secondary" gutterBottom>
+                  Tonnage Total
+                </Typography>
+                {isLoading ? (
+                  <Skeleton variant="text" height={48} />
+                ) : (
+                  <Typography variant="h3" component="div">
+                    {reportData?.tonnageTotal.toFixed(1)}T
+                  </Typography>
+                )}
               </CardContent>
             </Card>
           </Grid>
         </Grid>
 
-        <Paper className="p-4 mt-4">
+        <Paper className="p-6 mt-6">
           <Typography variant="h6" gutterBottom>
             Détails de la Distribution
           </Typography>
-          <Typography variant="body1">
-            • Période: {startDate?.format('DD/MM/YYYY')} - {endDate?.format('DD/MM/YYYY')}
-          </Typography>
-          <Typography variant="body1">
-            • Localités couvertes: 5
-          </Typography>
-          <Typography variant="body1">
-            • Ration par personne: 12.5 kg
-          </Typography>
+          {isLoading ? (
+            <Box sx={{ mt: 2 }}>
+              <Skeleton variant="text" />
+              <Skeleton variant="text" />
+              <Skeleton variant="text" />
+            </Box>
+          ) : (
+            <>
+              <Typography variant="body1" gutterBottom>
+                • Période: {startDate?.format('DD/MM/YYYY')} - {endDate?.format('DD/MM/YYYY')}
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                • Localités couvertes: {localites.length - 1}
+              </Typography>
+              <Typography variant="body1">
+                • Ration par personne: 50 kg
+              </Typography>
+            </>
+          )}
         </Paper>
       </TabPanel>
 
       {/* Distribution par Ménages */}
       <TabPanel value={tabValue} index={1}>
-        <Paper className="p-4">
+        <Paper className="p-6">
           <Typography variant="h6" gutterBottom>
             Distribution par Statut des Ménages
           </Typography>
-          <Bar data={statusChartData} />
-          
-          <Box mt={4}>
-            <Typography variant="body1">
-              • Nombre total de ménages: 250
-            </Typography>
-            <Typography variant="body1">
-              • Ménages déplacés: 162 (65%)
-            </Typography>
-            <Typography variant="body1">
-              • Ménages retournés: 88 (35%)
-            </Typography>
-          </Box>
+          {isLoading ? (
+            <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <CircularProgress />
+            </Box>
+          ) : (
+            <>
+              <Box sx={{ height: 300 }}>
+                <Bar data={statusChartData} />
+              </Box>
+              
+              <Box mt={4}>
+                <Typography variant="body1" gutterBottom>
+                  • Nombre total de ménages: {reportData?.totalMenages.toLocaleString()}
+                </Typography>
+                <Typography variant="body1" gutterBottom>
+                  • Ménages déplacés: {reportData?.distributionParStatut.deplaces.toLocaleString()} ({((reportData?.distributionParStatut.deplaces || 0) / (reportData?.totalMenages || 1) * 100).toFixed(1)}%)
+                </Typography>
+                <Typography variant="body1">
+                  • Ménages retournés: {reportData?.distributionParStatut.retournes.toLocaleString()} ({((reportData?.distributionParStatut.retournes || 0) / (reportData?.totalMenages || 1) * 100).toFixed(1)}%)
+                </Typography>
+              </Box>
+            </>
+          )}
         </Paper>
       </TabPanel>
 
@@ -327,41 +531,63 @@ function DistributionReport() {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Bénéficiaires par Catégorie</Typography>
-                <Box height={300}>
-                  <Bar
-                    data={{
-                      labels: ['Enfants', 'Adultes', 'Personnes âgées'],
-                      datasets: [{
-                        label: 'Nombre de bénéficiaires',
-                        data: [450, 650, 150],
-                        backgroundColor: [
-                          'rgba(255, 99, 132, 0.5)',
-                          'rgba(54, 162, 235, 0.5)',
-                          'rgba(255, 206, 86, 0.5)'
-                        ],
-                      }]
-                    }}
-                  />
-                </Box>
+                <Typography variant="h6" gutterBottom>
+                  Bénéficiaires par Catégorie
+                </Typography>
+                {isLoading ? (
+                  <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <Box height={300}>
+                    <Bar
+                      data={{
+                        labels: ['Enfants', 'Adultes', 'Personnes âgées'],
+                        datasets: [{
+                          label: 'Nombre de bénéficiaires',
+                          data: [
+                            reportData?.distributionParCategorie.enfants,
+                            reportData?.distributionParCategorie.adultes,
+                            reportData?.distributionParCategorie.personnesAgees
+                          ],
+                          backgroundColor: [
+                            'rgba(255, 99, 132, 0.5)',
+                            'rgba(54, 162, 235, 0.5)',
+                            'rgba(255, 206, 86, 0.5)'
+                          ],
+                        }]
+                      }}
+                    />
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Statistiques</Typography>
-                <Box mt={2}>
-                  <Typography variant="body1">
-                    • Total bénéficiaires: 1250
-                  </Typography>
-                  <Typography variant="body1">
-                    • Moyenne par ménage: 5 personnes
-                  </Typography>
-                  <Typography variant="body1">
-                    • Taux de présence: 95%
-                  </Typography>
-                </Box>
+                <Typography variant="h6" gutterBottom>
+                  Statistiques
+                </Typography>
+                {isLoading ? (
+                  <Box sx={{ mt: 2 }}>
+                    <Skeleton variant="text" />
+                    <Skeleton variant="text" />
+                    <Skeleton variant="text" />
+                  </Box>
+                ) : (
+                  <Box mt={2}>
+                    <Typography variant="body1" gutterBottom>
+                      • Total bénéficiaires: {reportData?.totalBeneficiaires.toLocaleString()}
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      • Moyenne par ménage: {(reportData?.totalBeneficiaires || 0) / (reportData?.totalMenages || 1).toFixed(1)} personnes
+                    </Typography>
+                    <Typography variant="body1">
+                      • Taux de présence: {reportData?.tauxDistribution.toFixed(1)}%
+                    </Typography>
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
@@ -370,34 +596,40 @@ function DistributionReport() {
 
       {/* Absents */}
       <TabPanel value={tabValue} index={3}>
-        <Paper className="p-4">
+        <Paper className="p-6">
           <Typography variant="h6" gutterBottom>
             Liste des Absents
           </Typography>
-          <TableContainer>
-            <Table>
-              <TableHead>
-                <TableRow>
-                  <TableCell>ID</TableCell>
-                  <TableCell>Nom</TableCell>
-                  <TableCell>Prénom</TableCell>
-                  <TableCell>Localité</TableCell>
-                  <TableCell>Raison</TableCell>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {absenteesList.map((absent) => (
-                  <TableRow key={absent.id}>
-                    <TableCell>{absent.id}</TableCell>
-                    <TableCell>{absent.nom}</TableCell>
-                    <TableCell>{absent.prenom}</TableCell>
-                    <TableCell>{absent.localite}</TableCell>
-                    <TableCell>{absent.raison}</TableCell>
+          {isLoading ? (
+            <Box sx={{ mt: 2 }}>
+              <Skeleton variant="rectangular" height={200} />
+            </Box>
+          ) : (
+            <TableContainer>
+              <Table>
+                <TableHead>
+                  <TableRow>
+                    <TableCell>ID</TableCell>
+                    <TableCell>Nom</TableCell>
+                    <TableCell>Prénom</TableCell>
+                    <TableCell>Localité</TableCell>
+                    <TableCell>Raison</TableCell>
                   </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </TableContainer>
+                </TableHead>
+                <TableBody>
+                  {reportData?.absents.map((absent) => (
+                    <TableRow key={absent.id}>
+                      <TableCell>{absent.id}</TableCell>
+                      <TableCell>{absent.nom}</TableCell>
+                      <TableCell>{absent.prenom}</TableCell>
+                      <TableCell>{absent.localite}</TableCell>
+                      <TableCell>{absent.raison}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </TableContainer>
+          )}
         </Paper>
       </TabPanel>
 
@@ -407,31 +639,50 @@ function DistributionReport() {
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6">État du Tonnage</Typography>
-                <Box height={300}>
-                  <Pie data={tonnageChartData} />
-                </Box>
+                <Typography variant="h6" gutterBottom>
+                  État du Tonnage
+                </Typography>
+                {isLoading ? (
+                  <Box sx={{ height: 300, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <Box height={300}>
+                    <Pie data={tonnageChartData} />
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>
           <Grid item xs={12} md={6}>
             <Card>
               <CardContent>
-                <Typography variant="h6">Détails du Tonnage</Typography>
-                <Box mt={2}>
-                  <Typography variant="body1">
-                    • Tonnage total prévu: 100T
-                  </Typography>
-                  <Typography variant="body1">
-                    • Tonnage distribué: 75T
-                  </Typography>
-                  <Typography variant="body1">
-                    • Tonnage restant: 25T
-                  </Typography>
-                  <Typography variant="body1">
-                    • Taux de distribution: 75%
-                  </Typography>
-                </Box>
+                <Typography variant="h6" gutterBottom>
+                  Détails du Tonnage
+                </Typography>
+                {isLoading ? (
+                  <Box sx={{ mt: 2 }}>
+                    <Skeleton variant="text" />
+                    <Skeleton variant="text" />
+                    <Skeleton variant="text" />
+                    <Skeleton variant="text" />
+                  </Box>
+                ) : (
+                  <Box mt={2}>
+                    <Typography variant="body1" gutterBottom>
+                      • Tonnage total prévu: {reportData?.tonnageTotal.toFixed(1)}T
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      • Tonnage distribué: {reportData?.tonnageDistribue.toFixed(1)}T
+                    </Typography>
+                    <Typography variant="body1" gutterBottom>
+                      • Tonnage restant: {reportData?.tonnageRestant.toFixed(1)}T
+                    </Typography>
+                    <Typography variant="body1">
+                      • Taux de distribution: {((reportData?.tonnageDistribue || 0) / (reportData?.tonnageTotal || 1) * 100).toFixed(1)}%
+                    </Typography>
+                  </Box>
+                )}
               </CardContent>
             </Card>
           </Grid>

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Paper, 
   Button, 
@@ -21,26 +21,52 @@ import {
   Link,
   Tabs,
   Tab,
-  InputAdornment
+  InputAdornment,
+  CircularProgress,
+  Stack,
+  Divider,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  FormControl,
+  InputLabel,
+  Select,
+  FormHelperText
 } from '@mui/material';
-import * as XLSX from 'xlsx';
-import { motion } from 'framer-motion';
 import CloudUploadIcon from '@mui/icons-material/CloudUpload';
 import DeleteIcon from '@mui/icons-material/Delete';
 import CheckCircleIcon from '@mui/icons-material/CheckCircle';
 import SearchIcon from '@mui/icons-material/Search';
 import FilterListIcon from '@mui/icons-material/FilterList';
 import DownloadIcon from '@mui/icons-material/Download';
+import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { PageTransition } from './PageTransition';
 import ManualRegistration from './ManualRegistration';
 import toast from 'react-hot-toast';
-import { dbOperations } from '../lib/db';
+import { typedSupabase } from '../lib/supabase';
+import { 
+  EXCEL_MAPPINGS, 
+  validateExcelRow, 
+  transformExcelData, 
+  getFieldOptions,
+  autoMapColumns
+} from '../lib/excelMapping';
+import { Beneficiaire } from '../types';
+import { parseExcel, parseCSV, isExcelFile, isCSVFile, validateFileType } from '../lib/excelParser';
 
 interface TabPanelProps {
   children?: React.ReactNode;
   index: number;
   value: number;
 }
+
+interface ColumnMapping {
+  [key: string]: string;
+}
+
+type SortOrder = 'asc' | 'desc';
+type SortField = keyof Beneficiaire;
 
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
@@ -62,392 +88,247 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
-interface Beneficiaire {
-  id: string;
-  siteDistribution: string;
-  adresse: string;
-  householdId: string;
-  nomMenage: string;
-  tokenNumber: string;
-  recipientFirstName: string;
-  recipientMiddleName: string | null;
-  recipientLastName: string;
-  nombreBeneficiaires: number;
-  nomSuppleant: string | null;
-}
-
-type SortOrder = 'asc' | 'desc';
-type SortField = keyof Beneficiaire;
-
-const FIELD_MAPPING = {
-  'Site de distribution': 'siteDistribution',
-  'Adresse': 'adresse',
-  'Household ID': 'householdId',
-  'Nom du Ménage': 'nomMenage',
-  'Token Number': 'tokenNumber',
-  'Recipient First Name': 'recipientFirstName',
-  'Recipient Middle Name': 'recipientMiddleName',
-  'Recipient Last Name': 'recipientLastName',
-  'Nombre des Bénéficiaires Enrôlés': 'nombreBeneficiaires',
-  'Nom Suppléant': 'nomSuppleant'
-};
-
-const REQUIRED_FIELDS = [
-  'Site de distribution',
-  'Adresse',
-  'Household ID',
-  'Nom du Ménage',
-  'Token Number',
-  'Recipient First Name',
-  'Recipient Last Name',
-  'Nombre des Bénéficiaires Enrôlés',
-  'Nom Suppléant'
-];
-
 function ImportList() {
   const [tabValue, setTabValue] = useState(0);
   const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
-  const [filterSite, setFilterSite] = useState('tous');
+  const [filterSite, setFilterSite] = useState('all');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(10);
   const [sortField, setSortField] = useState<SortField>('nomMenage');
   const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [importErrors, setImportErrors] = useState<string[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [isUploading, setIsUploading] = useState(false);
+  const [showMappingDialog, setShowMappingDialog] = useState(false);
+  const [columnMapping, setColumnMapping] = useState<ColumnMapping>({});
+  const [availableColumns, setAvailableColumns] = useState<string[]>([]);
+  const [tempFileData, setTempFileData] = useState<any[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const fetchBeneficiaires = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+
+      const { data, error: fetchError } = await typedSupabase
+        .from('beneficiaires')
+        .select(`
+          *,
+          menage:menages!inner(
+            *,
+            site:sites_distribution!inner(*)
+          )
+        `);
+
+      if (fetchError) throw fetchError;
+
+      if (data) {
+        const transformedData = data.map(item => ({
+          id: item.id,
+          siteDistribution: item.menage.site.nom,
+          adresse: item.menage.site.adresse,
+          householdId: item.menage.household_id,
+          nomMenage: item.menage.nom_menage,
+          tokenNumber: item.menage.token_number,
+          recipientFirstName: item.first_name,
+          recipientMiddleName: item.middle_name,
+          recipientLastName: item.last_name,
+          nombreBeneficiaires: item.menage.nombre_beneficiaires,
+          nomSuppleant: null // This will be populated if there's a non-principal beneficiary
+        }));
+
+        setBeneficiaires(transformedData);
+      }
+    } catch (err) {
+      console.error('Error fetching beneficiaires:', err);
+      setError('Erreur lors du chargement des données');
+      toast.error('Erreur lors du chargement des données');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchBeneficiaires();
+  }, []);
+
+  const handleFileUpload = async (file: File) => {
+    try {
+      setIsUploading(true);
+      setImportErrors([]);
+
+      if (!validateFileType(file)) {
+        throw new Error('Format de fichier non supporté. Utilisez Excel (.xlsx, .xls) ou CSV.');
+      }
+
+      let jsonData: any[];
+
+      if (isExcelFile(file)) {
+        jsonData = await parseExcel(file);
+      } else if (isCSVFile(file)) {
+        jsonData = await parseCSV(file);
+      } else {
+        throw new Error('Format de fichier non supporté');
+      }
+
+      if (jsonData.length === 0) {
+        setImportErrors(['Le fichier est vide']);
+        toast.error('Le fichier est vide');
+        return;
+      }
+
+      const columns = Object.keys(jsonData[0]);
+      setAvailableColumns(columns);
+      
+      // Auto-map columns
+      const autoMapping = autoMapColumns(columns);
+      setColumnMapping(autoMapping);
+      
+      setTempFileData(jsonData);
+      setShowMappingDialog(true);
+
+      // Show toast with mapping results
+      const mappedCount = Object.keys(autoMapping).length;
+      const unmappedCount = columns.length - mappedCount;
+      
+      if (mappedCount > 0) {
+        toast.success(`${mappedCount} colonnes mappées automatiquement${unmappedCount > 0 ? ` (${unmappedCount} non mappées)` : ''}`);
+      } else {
+        toast.warning('Aucune colonne n\'a pu être mappée automatiquement');
+      }
+    } catch (error: any) {
+      console.error('Error importing file:', error);
+      setImportErrors([error.message || 'Format de fichier invalide ou corrompu']);
+      toast.error('Erreur lors de l\'importation du fichier');
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
+  const handleImportData = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      setImportErrors([]);
+
+      const { data: transformedData, errors } = transformExcelData(tempFileData, columnMapping);
+      
+      if (errors.length > 0) {
+        setImportErrors(errors);
+        toast.error('Erreurs de validation dans les données');
+        return;
+      }
+
+      const importErrors: string[] = [];
+      const importPromises = transformedData.map(async (record, index) => {
+        try {
+          const { data, error } = await typedSupabase.rpc('import_household_data', {
+            p_site_nom: record.siteDistribution?.trim() || 'Site par défaut',
+            p_site_adresse: record.adresse?.trim() || '',
+            p_household_id: record.householdId?.trim() || `HH-${Date.now()}-${index}`,
+            p_nom_menage: record.nomMenage?.trim() || `Ménage ${index + 1}`,
+            p_token_number: record.tokenNumber?.trim() || `TK-${Date.now()}-${index}`,
+            p_nombre_beneficiaires: record.nombreBeneficiaires || 1,
+            p_recipient_first_name: record.recipientFirstName?.trim() || 'Prénom',
+            p_recipient_middle_name: record.recipientMiddleName?.trim() || null,
+            p_recipient_last_name: record.recipientLastName?.trim() || 'Nom',
+            p_nom_suppleant: record.nomSuppleant?.trim() || null
+          });
+
+          if (error) {
+            importErrors.push(`Ligne ${index + 2}: ${error.message}`);
+            return null;
+          }
+
+          return data;
+        } catch (err: any) {
+          importErrors.push(`Ligne ${index + 2}: ${err.message}`);
+          return null;
+        }
+      });
+
+      const results = await Promise.all(importPromises);
+      
+      if (importErrors.length > 0) {
+        setImportErrors(importErrors);
+        toast.error('Des erreurs sont survenues lors de l\'importation');
+      } else {
+        toast.success('Importation réussie');
+        setShowMappingDialog(false);
+        fetchBeneficiaires();
+      }
+    } catch (err: any) {
+      console.error('Error importing data:', err);
+      setError(err.message || 'Erreur lors de l\'importation des données');
+      toast.error('Erreur lors de l\'importation');
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
 
-  const validateData = (data: any[]): { valid: Beneficiaire[], errors: string[] } => {
-    const errors: string[] = [];
-    const validData: Beneficiaire[] = [];
-
-    if (data.length === 0) {
-      errors.push('Le fichier est vide');
-      return { valid: [], errors };
-    }
-
-    const firstRow = data[0];
-    const headers = Object.keys(firstRow);
-    const missingColumns = REQUIRED_FIELDS.filter(field => 
-      !headers.includes(field)
-    );
-
-    if (missingColumns.length > 0) {
-      errors.push(`Colonnes manquantes: ${missingColumns.join(', ')}`);
-      return { valid: [], errors };
-    }
-
-    data.forEach((row, index) => {
-      const rowNumber = index + 2;
-      const currentErrors: string[] = [];
-
-      REQUIRED_FIELDS.forEach(field => {
-        const value = row[field];
-        if (!value && value !== 0 && field !== 'Nom Suppléant') {
-          currentErrors.push(`Ligne ${rowNumber}: Le champ "${field}" est obligatoire`);
-        }
-      });
-
-      const nombreBeneficiaires = parseInt(String(row['Nombre des Bénéficiaires Enrôlés']));
-      if (isNaN(nombreBeneficiaires) || nombreBeneficiaires < 1) {
-        currentErrors.push(`Ligne ${rowNumber}: Le nombre de bénéficiaires doit être un nombre positif`);
-      }
-
-      if (currentErrors.length === 0) {
-        validData.push({
-          id: crypto.randomUUID(),
-          siteDistribution: row['Site de distribution'],
-          adresse: row['Adresse'],
-          householdId: row['Household ID'],
-          nomMenage: row['Nom du Ménage'],
-          tokenNumber: row['Token Number'],
-          recipientFirstName: row['Recipient First Name'],
-          recipientMiddleName: row['Recipient Middle Name'] || null,
-          recipientLastName: row['Recipient Last Name'],
-          nombreBeneficiaires,
-          nomSuppleant: row['Nom Suppléant'] || null
-        });
-      } else {
-        errors.push(...currentErrors);
-      }
-    });
-
-    return { valid: validData, errors };
-  };
-
-  const handleFileUpload = async (file: File) => {
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      try {
-        const data = e.target?.result;
-        const workbook = XLSX.read(data, { type: 'binary' });
-        const sheetName = workbook.SheetNames[0];
-        const sheet = workbook.Sheets[sheetName];
-        const jsonData = XLSX.utils.sheet_to_json(sheet) as any[];
-
-        if (jsonData.length === 0) {
-          setImportErrors(['Le fichier est vide']);
-          toast.error('Le fichier est vide');
-          return;
-        }
-
-        const { valid, errors } = validateData(jsonData);
-        setImportErrors(errors);
-
-        if (valid.length > 0) {
-          // Import data to SQLite
-          for (const beneficiaire of valid) {
-            try {
-              dbOperations.importHouseholdData(
-                beneficiaire.siteDistribution,
-                beneficiaire.adresse,
-                beneficiaire.householdId,
-                beneficiaire.nomMenage,
-                beneficiaire.tokenNumber,
-                beneficiaire.nombreBeneficiaires,
-                beneficiaire.recipientFirstName,
-                beneficiaire.recipientMiddleName,
-                beneficiaire.recipientLastName,
-                beneficiaire.nomSuppleant
-              );
-            } catch (error) {
-              console.error('Error importing data:', error);
-              errors.push(`Erreur d'importation pour ${beneficiaire.nomMenage}`);
-            }
-          }
-
-          setBeneficiaires(valid);
-          toast.success(`${valid.length} bénéficiaires importés avec succès${errors.length > 0 ? ' (avec des erreurs)' : ''}`);
-        } else {
-          toast.error('Aucune donnée valide n\'a pu être importée');
-        }
-      } catch (error) {
-        console.error('Error importing file:', error);
-        setImportErrors(['Format de fichier invalide ou corrompu']);
-        toast.error('Erreur lors de l\'importation du fichier');
-      }
-    };
-    reader.readAsBinaryString(file);
-  };
-
-  const downloadTemplate = () => {
-    const template = {
-      'Site de distribution': '',
-      'Adresse': '',
-      'Household ID': '',
-      'Nom du Ménage': '',
-      'Token Number': '',
-      'Recipient First Name': '',
-      'Recipient Middle Name': '',
-      'Recipient Last Name': '',
-      'Nombre des Bénéficiaires Enrôlés': 1,
-      'Nom Suppléant': ''
-    };
-
-    const ws = XLSX.utils.json_to_sheet([template]);
-    const wb = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(wb, ws, 'Bénéficiaires');
-    XLSX.writeFile(wb, 'modele_beneficiaires.xlsx');
-  };
-
-  const handleDragOver = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(true);
-  };
-
-  const handleDragLeave = () => {
-    setIsDragging(false);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    setIsDragging(false);
-    const file = e.dataTransfer.files[0];
-    if (file && (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' || file.type === 'application/vnd.ms-excel')) {
-      handleFileUpload(file);
-    } else {
-      setImportErrors(['Format de fichier non supporté. Utilisez un fichier Excel (.xlsx)']);
-      toast.error('Format de fichier non supporté. Utilisez un fichier Excel (.xlsx)');
-    }
-  };
-
-  const handleDelete = async (id: string) => {
-    try {
-      // Delete from SQLite
-      dbOperations.deleteMenage.run(id);
-      setBeneficiaires(prev => prev.filter(b => b.id !== id));
-      toast.success('Bénéficiaire supprimé');
-    } catch (error) {
-      console.error('Error deleting beneficiary:', error);
-      toast.error('Erreur lors de la suppression');
-    }
-  };
-
-  const handleChangePage = (event: unknown, newPage: number) => {
-    setPage(newPage);
-  };
-
-  const handleChangeRowsPerPage = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setRowsPerPage(parseInt(event.target.value, 10));
-    setPage(0);
-  };
-
-  const handleSort = (field: SortField) => {
-    const isAsc = sortField === field && sortOrder === 'asc';
-    setSortOrder(isAsc ? 'desc' : 'asc');
-    setSortField(field);
-  };
-
-  const filteredAndSortedData = useMemo(() => {
-    return beneficiaires
-      .filter(b => {
-        const matchesSearch = (
-          b.nomMenage.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          b.recipientFirstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          b.recipientLastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          b.householdId.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-        const matchesSite = filterSite === 'tous' || b.siteDistribution === filterSite;
-        return matchesSearch && matchesSite;
-      })
-      .sort((a, b) => {
-        const compareValue = (va: any, vb: any) => {
-          if (typeof va === 'string' && typeof vb === 'string') {
-            return va.localeCompare(vb, 'fr', { sensitivity: 'base' });
-          }
-          return va - vb;
-        };
-        
-        const value = compareValue(a[sortField], b[sortField]);
-        return sortOrder === 'asc' ? value : -value;
-      });
-  }, [beneficiaires, searchTerm, filterSite, sortField, sortOrder]);
-
-  const uniqueSites = useMemo(() => 
-    ['tous', ...new Set(beneficiaires.map(b => b.siteDistribution))],
-    [beneficiaires]
-  );
-
-  const paginatedData = filteredAndSortedData.slice(
-    page * rowsPerPage,
-    page * rowsPerPage + rowsPerPage
-  );
-
-  const totalBeneficiaires = filteredAndSortedData.length;
-  const totalPersonnes = filteredAndSortedData.reduce((sum, b) => sum + b.nombreBeneficiaires, 0);
-
   return (
     <PageTransition>
       <div className="space-y-6">
         <Typography variant="h4" component="h1" gutterBottom>
-          Enregistrement des Bénéficiaires
+          Vérification de la Liste
         </Typography>
 
-        <Paper sx={{ borderRadius: 2 }}>
-          <Tabs
-            value={tabValue}
-            onChange={handleTabChange}
-            variant="fullWidth"
-            sx={{ borderBottom: 1, borderColor: 'divider' }}
-          >
-            <Tab label="Import Excel" />
-            <Tab label="Enregistrement Manuel" />
-          </Tabs>
+        <Tabs 
+          value={tabValue} 
+          onChange={handleTabChange}
+          variant="fullWidth"
+          sx={{
+            '& .MuiTab-root': {
+              minHeight: 64,
+              fontSize: '0.9rem',
+              fontWeight: 500
+            }
+          }}
+        >
+          <Tab label="Import Excel" />
+          <Tab label="Enregistrement Manuel" />
+        </Tabs>
 
-          <TabPanel value={tabValue} index={0}>
-            <motion.div
-              whileHover={{ scale: 1.02 }}
-              whileTap={{ scale: 0.98 }}
-            >
-              <Paper
-                className={`p-8 text-center border-2 border-dashed ${
-                  isDragging ? 'border-primary-500 bg-primary-50' : 'border-gray-300'
-                } transition-colors duration-200`}
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
+        <TabPanel value={tabValue} index={0}>
+          <Paper className="p-6">
+            <Box sx={{ textAlign: 'center', py: 4 }}>
+              <input
+                type="file"
+                accept=".xlsx,.xls,.csv"
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) handleFileUpload(file);
+                }}
+                style={{ display: 'none' }}
+                ref={fileInputRef}
+              />
+              <Button
+                variant="outlined"
+                size="large"
+                startIcon={<UploadFileIcon />}
+                onClick={() => fileInputRef.current?.click()}
+                disabled={isUploading}
+                sx={{ mb: 2 }}
               >
-                <CloudUploadIcon sx={{ fontSize: 48, color: 'primary.main', mb: 2 }} />
-                <Typography variant="h6" gutterBottom>
-                  Glissez-déposez votre fichier Excel ici
-                </Typography>
-                <Typography variant="body2" color="textSecondary" gutterBottom>
-                  Format requis: .xlsx ou .xls
-                </Typography>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="body2" color="textSecondary" gutterBottom>
-                    Colonnes requises: {REQUIRED_FIELDS.join(', ')}
-                  </Typography>
-                  <Link
-                    component="button"
-                    variant="body2"
-                    onClick={downloadTemplate}
-                    sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, margin: '0 auto' }}
-                  >
-                    <DownloadIcon fontSize="small" />
-                    Télécharger le modèle Excel
-                  </Link>
-                </Box>
-                <Button
-                  variant="contained"
-                  component="label"
-                  startIcon={<CloudUploadIcon />}
-                >
-                  Sélectionner un fichier
-                  <input
-                    type="file"
-                    hidden
-                    accept=".xlsx,.xls"
-                    onChange={(e) => {
-                      const file = e.target.files?.[0];
-                      if (file) handleFileUpload(file);
-                    }}
-                  />
-                </Button>
-              </Paper>
-            </motion.div>
-          </TabPanel>
+                {isUploading ? 'Importation...' : 'Importer un fichier'}
+              </Button>
+              
+              <Typography variant="body2" color="text.secondary">
+                Formats supportés: .xlsx, .xls, .csv
+              </Typography>
+            </Box>
+          </Paper>
 
-          <TabPanel value={tabValue} index={1}>
-            <ManualRegistration
-              onRegistrationComplete={() => {
-                // Refresh the list after manual registration
-                const menages = dbOperations.getMenages.all();
-                setBeneficiaires(menages.map(m => ({
-                  id: m.id,
-                  siteDistribution: m.site_nom,
-                  adresse: m.site_adresse,
-                  householdId: m.household_id,
-                  nomMenage: m.nom_menage,
-                  tokenNumber: m.token_number,
-                  recipientFirstName: m.first_name,
-                  recipientMiddleName: m.middle_name,
-                  recipientLastName: m.last_name,
-                  nombreBeneficiaires: m.nombre_beneficiaires,
-                  nomSuppleant: m.nom_suppleant
-                })));
-              }}
-            />
-          </TabPanel>
-        </Paper>
-
-        {importErrors.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ opacity: 1, y: 0 }}
-          >
-            <Alert 
-              severity="error" 
-              onClose={() => setImportErrors([])}
-              sx={{
-                '& .MuiAlert-message': {
-                  width: '100%'
-                }
-              }}
-            >
+          {importErrors.length > 0 && (
+            <Alert severity="error" sx={{ mt: 2 }}>
               <Typography variant="subtitle2" gutterBottom>
                 Erreurs d'importation:
               </Typography>
@@ -456,161 +337,80 @@ function ImportList() {
                   <li key={index}>{error}</li>
                 ))}
               </ul>
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" color="error">
-                  Veuillez corriger ces erreurs et réessayer l'importation.
-                </Typography>
-                <Link
-                  component="button"
-                  variant="body2"
-                  onClick={downloadTemplate}
-                  sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}
-                >
-                  <DownloadIcon fontSize="small" />
-                  Télécharger le modèle Excel
-                </Link>
-              </Box>
             </Alert>
-          </motion.div>
-        )}
+          )}
 
-        {beneficiaires.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.5 }}
+          <Dialog
+            open={showMappingDialog}
+            onClose={() => setShowMappingDialog(false)}
+            maxWidth="md"
+            fullWidth
           >
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-              <Typography variant="h6">
-                Liste des bénéficiaires ({totalBeneficiaires})
-              </Typography>
-              <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
-                <Chip
-                  label={`Total bénéficiaires: ${totalPersonnes}`}
-                  color="primary"
-                  variant="outlined"
-                />
-                <Chip
-                  icon={<CheckCircleIcon />}
-                  label="Liste validée"
-                  color="success"
-                  variant="outlined"
-                />
-              </Box>
-            </Box>
-
-            <Paper className="mb-4 p-4">
-              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-                <TextField
-                  size="small"
-                  placeholder="Rechercher..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  InputProps={{
-                    startAdornment: (
-                      <InputAdornment position="start">
-                        <SearchIcon />
-                      </InputAdornment>
-                    ),
-                  }}
-                  sx={{ minWidth: 200 }}
-                />
-                <TextField
-                  select
-                  size="small"
-                  label="Site de distribution"
-                  value={filterSite}
-                  onChange={(e) => setFilterSite(e.target.value)}
-                  sx={{ minWidth: 200 }}
-                >
-                  {uniqueSites.map((site) => (
-                    <MenuItem key={site} value={site}>
-                      {site === 'tous' ? 'Tous les sites' : site}
-                    </MenuItem>
-                  ))}
-                </TextField>
-                <Tooltip title="Filtres actifs">
-                  <IconButton color="primary">
-                    <FilterListIcon />
-                  </IconButton>
-                </Tooltip>
-              </Box>
-            </Paper>
-
-            <TableContainer component={Paper} className="shadow-lg">
-              <Table>
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <TableSortLabel
-                        active={sortField === 'householdId'}
-                        direction={sortField === 'householdId' ? sortOrder : 'asc'}
-                        onClick={() => handleSort('householdId')}
-                      >
-                        Household ID
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>
-                      <TableSortLabel
-                        active={sortField === 'nomMenage'}
-                        direction={sortField === 'nomMenage' ? sortOrder : 'asc'}
-                        onClick={() => handleSort('nomMenage')}
-                      >
-                        Nom du Ménage
-                      </TableSortLabel>
-                    </TableCell>
-                    <TableCell>Token Number</TableCell>
-                    <TableCell>Bénéficiaire Principal</TableCell>
-                    <TableCell>Site de distribution</TableCell>
-                    <TableCell>Nombre de Bénéficiaires</TableCell>
-                    <TableCell>Suppléant</TableCell>
-                    <TableCell>Actions</TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {paginatedData.map((beneficiaire) => (
-                    <TableRow 
-                      key={beneficiaire.id}
-                      hover
-                      className="transition-colors duration-200"
+            <DialogTitle>
+              Mapper les Colonnes
+            </DialogTitle>
+            <DialogContent>
+              <Box sx={{ mt: 2 }}>
+                <Typography variant="body2" color="text.secondary" gutterBottom>
+                  Veuillez associer les colonnes de votre fichier aux champs correspondants.
+                </Typography>
+                
+                {availableColumns.map((column) => (
+                  <FormControl
+                    key={column}
+                    fullWidth
+                    margin="normal"
+                    size="small"
+                  >
+                    <InputLabel>{column}</InputLabel>
+                    <Select
+                      value={columnMapping[column] || ''}
+                      onChange={(e) => {
+                        setColumnMapping(prev => ({
+                          ...prev,
+                          [column]: e.target.value
+                        }));
+                      }}
+                      label={column}
                     >
-                      <TableCell>{beneficiaire.householdId}</TableCell>
-                      <TableCell>{beneficiaire.nomMenage}</TableCell>
-                      <TableCell>{beneficiaire.tokenNumber}</TableCell>
-                      <TableCell>
-                        {`${beneficiaire.recipientFirstName} ${beneficiaire.recipientMiddleName || ''} ${beneficiaire.recipientLastName}`}
-                      </TableCell>
-                      <TableCell>{beneficiaire.siteDistribution}</TableCell>
-                      <TableCell>{beneficiaire.nombreBeneficiaires}</TableCell>
-                      <TableCell>{beneficiaire.nomSuppleant || '-'}</TableCell>
-                      <TableCell>
-                        <Tooltip title="Supprimer">
-                          <IconButton 
-                            color="error"
-                            size="small"
-                            onClick={() => handleDelete(beneficiaire.id)}
-                          >
-                            <DeleteIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-              <TablePagination
-                rowsPerPageOptions={[5, 10, 25, 50]}
-                component="div"
-                count={filteredAndSortedData.length}
-                rowsPerPage={rowsPerPage}
-                page={page}
-                onPageChange={handleChangePage}
-                onRowsPerPageChange={handleChangeRowsPerPage}
-                labelRowsPerPage="Lignes par page"
-              />
-            </TableContainer>
-          </motion.div>
-        )}
+                      <MenuItem value="">
+                        <em>Ne pas importer</em>
+                      </MenuItem>
+                      {getFieldOptions().map((option) => (
+                        <MenuItem 
+                          key={option.value} 
+                          value={option.value}
+                          disabled={Object.values(columnMapping).includes(option.value)}
+                        >
+                          {option.label}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                ))}
+              </Box>
+            </DialogContent>
+            <DialogActions>
+              <Button 
+                onClick={() => setShowMappingDialog(false)}
+                color="inherit"
+              >
+                Annuler
+              </Button>
+              <Button 
+                onClick={handleImportData}
+                variant="contained"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Importation...' : 'Importer les Données'}
+              </Button>
+            </DialogActions>
+          </Dialog>
+        </TabPanel>
+
+        <TabPanel value={tabValue} index={1}>
+          <ManualRegistration onRegistrationComplete={fetchBeneficiaires} />
+        </TabPanel>
       </div>
     </PageTransition>
   );

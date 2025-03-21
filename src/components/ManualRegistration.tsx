@@ -21,8 +21,8 @@ import QrCodeScannerIcon from '@mui/icons-material/QrCodeScanner';
 import CloseIcon from '@mui/icons-material/Close';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import VideocamIcon from '@mui/icons-material/Videocam';
-import { Html5Qrcode, Html5QrcodeScanner, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { supabase } from '../lib/supabase';
+import { Html5Qrcode } from 'html5-qrcode';
+import { typedSupabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
 
 interface ManualRegistrationProps {
@@ -31,7 +31,7 @@ interface ManualRegistrationProps {
 
 type ScannerType = 'mobile' | 'webcam';
 
-export default function ManualRegistration({ onRegistrationComplete }: ManualRegistrationProps) {
+function ManualRegistration({ onRegistrationComplete }: ManualRegistrationProps) {
   const [formData, setFormData] = useState({
     siteDistribution: '',
     adresse: '',
@@ -77,7 +77,7 @@ export default function ManualRegistration({ onRegistrationComplete }: ManualReg
     setError(null);
 
     try {
-      const { data, error: dbError } = await supabase.rpc('import_household_data', {
+      const { data, error: dbError } = await typedSupabase.rpc('import_household_data', {
         p_site_nom: formData.siteDistribution,
         p_site_adresse: formData.adresse,
         p_household_id: formData.householdId,
@@ -85,9 +85,9 @@ export default function ManualRegistration({ onRegistrationComplete }: ManualReg
         p_token_number: formData.tokenNumber,
         p_nombre_beneficiaires: parseInt(formData.nombreBeneficiaires),
         p_recipient_first_name: formData.recipientFirstName,
-        p_recipient_middle_name: formData.recipientMiddleName,
+        p_recipient_middle_name: formData.recipientMiddleName || null,
         p_recipient_last_name: formData.recipientLastName,
-        p_nom_suppleant: formData.nomSuppleant
+        p_nom_suppleant: formData.nomSuppleant || null
       });
 
       if (dbError) throw dbError;
@@ -145,16 +145,9 @@ export default function ManualRegistration({ onRegistrationComplete }: ManualReg
       setIsScanning(true);
       const config = {
         fps: 10,
-        qrbox: { width: 250, height: 250 },
-        formatsToSupport: [
-          Html5QrcodeSupportedFormats.QR_CODE,
-          Html5QrcodeSupportedFormats.CODE_128,
-          Html5QrcodeSupportedFormats.EAN_13,
-          Html5QrcodeSupportedFormats.CODE_39
-        ]
+        qrbox: { width: 250, height: 250 }
       };
 
-      // Create a new instance only if we don't have one
       if (!html5QrCode.current) {
         html5QrCode.current = new Html5Qrcode("qr-reader");
       }
@@ -464,3 +457,5 @@ export default function ManualRegistration({ onRegistrationComplete }: ManualReg
     </motion.div>
   );
 }
+
+export default ManualRegistration;
