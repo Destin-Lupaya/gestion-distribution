@@ -1,30 +1,36 @@
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
-import { ThemeProvider, Container } from '@mui/material';
-import { theme } from './theme';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { Container, ThemeProvider } from '@mui/material';
+import { AnimatePresence } from 'framer-motion';
 import Navbar from './components/Navbar';
 import ImportList from './components/ImportList';
 import SignatureCollection from './components/SignatureCollection';
 import DistributionReport from './components/DistributionReport';
-import { AnimatePresence } from 'framer-motion';
+import QRTester from './components/QRTester';
+import TestParser from './components/TestParser';
+import DataGridView from './components/DataGrid';
+import { theme } from './theme';
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
-      <Router>
-        <div className="min-h-screen bg-gray-50">
+      <BrowserRouter>
+        <div className="App">
           <Navbar />
-          <AnimatePresence mode="wait">
-            <Container maxWidth="xl" sx={{ py: 4 }}>
+          <Container maxWidth="lg">
+            <AnimatePresence mode="wait">
               <Routes>
                 <Route path="/" element={<ImportList />} />
                 <Route path="/signatures" element={<SignatureCollection />} />
-                <Route path="/rapport" element={<DistributionReport />} />
+                <Route path="/report" element={<DistributionReport />} />
+                <Route path="/qr-test" element={<QRTester />} />
+                <Route path="/test-parser" element={<TestParser />} />
+                <Route path="/data" element={<DataGridView />} />
               </Routes>
-            </Container>
-          </AnimatePresence>
+            </AnimatePresence>
+          </Container>
         </div>
-      </Router>
+      </BrowserRouter>
     </ThemeProvider>
   );
 }

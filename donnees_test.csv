@@ -1,0 +1,6 @@
+siteDistribution,householdId,nomMenage,tokenNumber,nombreBeneficiaires,recipientFirstName,recipientMiddleName,recipientLastName,adresse,nomSuppleant,dateInscription
+"Kinshasa Centre","KIN001","Famille Mutombo","TK001",5,"Jean","Pierre","Mutombo","123 Avenue de la Paix","Marie Mutombo","2025-03-21"
+"Kinshasa Est","KIN002","Famille Kabongo","TK002",3,"Paul","","Kabongo","45 Avenue du Commerce","Sarah Kabongo","2025-03-21"
+"Kinshasa Ouest","KIN003","Famille Lukaku","TK003",4,"David","James","Lukaku","78 Avenue des Arts","","2025-03-21"
+"Kinshasa Centre","KIN004","Famille Mbuyi","TK004",6,"Sophie","Marie","Mbuyi","90 Avenue du Marché","Pierre Mbuyi","2025-03-21"
+"Kinshasa Est","KIN005","Famille Tshilumba","TK005",4,"Marc","","Tshilumba","34 Avenue de l'École","Anne Tshilumba","2025-03-21"

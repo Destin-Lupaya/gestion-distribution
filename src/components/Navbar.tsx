@@ -5,6 +5,7 @@ import { motion } from 'framer-motion';
 import ListAltIcon from '@mui/icons-material/ListAlt';
 import DrawIcon from '@mui/icons-material/Draw';
 import AssessmentIcon from '@mui/icons-material/Assessment';
+import GridViewIcon from '@mui/icons-material/GridView';
 
 function Navbar() {
   const location = useLocation();
@@ -80,6 +81,7 @@ function Navbar() {
             <NavButton to="/" icon={<ListAltIcon />} label="Vérification Liste" />
             <NavButton to="/signatures" icon={<DrawIcon />} label="Émargement" />
             <NavButton to="/rapport" icon={<AssessmentIcon />} label="Rapport" />
+            <NavButton to="/data" icon={<GridViewIcon />} label="Données" />
           </Box>
         </Toolbar>
       </Container>

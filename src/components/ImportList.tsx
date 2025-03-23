@@ -6,25 +6,13 @@ import {
   TextField,
   MenuItem,
   Box,
-  Chip,
   IconButton,
   Tooltip,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  TablePagination,
-  TableSortLabel,
   Alert,
-  Link,
   Tabs,
   Tab,
   InputAdornment,
   CircularProgress,
-  Stack,
-  Divider,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -32,21 +20,16 @@ import {
   FormControl,
   InputLabel,
   Select,
-  FormHelperText
 } from '@mui/material';
-import CloudUploadIcon from '@mui/icons-material/CloudUpload';
-import DeleteIcon from '@mui/icons-material/Delete';
-import CheckCircleIcon from '@mui/icons-material/CheckCircle';
+import { DataGrid, GridColDef } from '@mui/x-data-grid';
 import SearchIcon from '@mui/icons-material/Search';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import DownloadIcon from '@mui/icons-material/Download';
+import DeleteIcon from '@mui/icons-material/Delete';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { PageTransition } from './PageTransition';
 import ManualRegistration from './ManualRegistration';
 import toast from 'react-hot-toast';
 import { typedSupabase } from '../lib/supabase';
 import { 
-  EXCEL_MAPPINGS, 
   validateExcelRow, 
   transformExcelData, 
   getFieldOptions,
@@ -64,9 +47,6 @@ interface TabPanelProps {
 interface ColumnMapping {
   [key: string]: string;
 }
-
-type SortOrder = 'asc' | 'desc';
-type SortField = keyof Beneficiaire;
 
 function TabPanel(props: TabPanelProps) {
   const { children, value, index, ...other } = props;
@@ -91,13 +71,8 @@ function TabPanel(props: TabPanelProps) {
 function ImportList() {
   const [tabValue, setTabValue] = useState(0);
   const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[]>([]);
-  const [isDragging, setIsDragging] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSite, setFilterSite] = useState('all');
-  const [page, setPage] = useState(0);
-  const [rowsPerPage, setRowsPerPage] = useState(10);
-  const [sortField, setSortField] = useState<SortField>('nomMenage');
-  const [sortOrder, setSortOrder] = useState<SortOrder>('asc');
   const [importErrors, setImportErrors] = useState<string[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [isUploading, setIsUploading] = useState(false);
@@ -109,36 +84,89 @@ function ImportList() {
   
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  const columns: GridColDef[] = [
+    { field: 'siteDistribution', headerName: 'Site', flex: 1 },
+    { field: 'householdId', headerName: 'ID Ménage', flex: 1 },
+    { field: 'nomMenage', headerName: 'Nom du Ménage', flex: 1 },
+    { field: 'tokenNumber', headerName: 'Token', flex: 1 },
+    { field: 'nombreBeneficiaires', headerName: 'Bénéficiaires', width: 120, type: 'number' },
+    { field: 'recipientFirstName', headerName: 'Prénom', flex: 1 },
+    { field: 'recipientLastName', headerName: 'Nom', flex: 1 },
+    {
+      field: 'actions',
+      headerName: 'Actions',
+      width: 120,
+      renderCell: (params) => (
+        <IconButton
+          onClick={() => handleDelete(params.row.id)}
+          color="error"
+          size="small"
+        >
+          <DeleteIcon />
+        </IconButton>
+      ),
+    },
+  ];
+
+  const handleDelete = async (id: string) => {
+    try {
+      const { error } = await typedSupabase
+        .from('menages')
+        .delete()
+        .eq('id', id);
+
+      if (error) throw error;
+
+      setBeneficiaires(prev => prev.filter(b => b.id !== id));
+      toast.success('Bénéficiaire supprimé avec succès');
+    } catch (err) {
+      console.error('Error deleting beneficiary:', err);
+      toast.error('Erreur lors de la suppression');
+    }
+  };
+
   const fetchBeneficiaires = async () => {
     try {
       setIsLoading(true);
       setError(null);
 
       const { data, error: fetchError } = await typedSupabase
-        .from('beneficiaires')
+        .from('menages')
         .select(`
-          *,
-          menage:menages!inner(
-            *,
-            site:sites_distribution!inner(*)
+          id,
+          household_id,
+          nom_menage,
+          token_number,
+          nombre_beneficiaires,
+          sites_distribution!inner (
+            nom,
+            adresse
+          ),
+          beneficiaires!inner (
+            id,
+            first_name,
+            middle_name,
+            last_name,
+            est_principal
           )
-        `);
+        `)
+        .eq('beneficiaires.est_principal', true);
 
       if (fetchError) throw fetchError;
 
       if (data) {
         const transformedData = data.map(item => ({
           id: item.id,
-          siteDistribution: item.menage.site.nom,
-          adresse: item.menage.site.adresse,
-          householdId: item.menage.household_id,
-          nomMenage: item.menage.nom_menage,
-          tokenNumber: item.menage.token_number,
-          recipientFirstName: item.first_name,
-          recipientMiddleName: item.middle_name,
-          recipientLastName: item.last_name,
-          nombreBeneficiaires: item.menage.nombre_beneficiaires,
-          nomSuppleant: null // This will be populated if there's a non-principal beneficiary
+          siteDistribution: item.sites_distribution.nom,
+          adresse: item.sites_distribution.adresse,
+          householdId: item.household_id,
+          nomMenage: item.nom_menage,
+          tokenNumber: item.token_number,
+          recipientFirstName: item.beneficiaires[0].first_name,
+          recipientMiddleName: item.beneficiaires[0].middle_name,
+          recipientLastName: item.beneficiaires[0].last_name,
+          nombreBeneficiaires: item.nombre_beneficiaires,
+          nomSuppleant: null
         }));
 
         setBeneficiaires(transformedData);
@@ -160,6 +188,7 @@ function ImportList() {
     try {
       setIsUploading(true);
       setImportErrors([]);
+      setError(null);
 
       if (!validateFileType(file)) {
         throw new Error('Format de fichier non supporté. Utilisez Excel (.xlsx, .xls) ou CSV.');
@@ -167,43 +196,52 @@ function ImportList() {
 
       let jsonData: any[];
 
-      if (isExcelFile(file)) {
-        jsonData = await parseExcel(file);
-      } else if (isCSVFile(file)) {
-        jsonData = await parseCSV(file);
-      } else {
-        throw new Error('Format de fichier non supporté');
+      try {
+        if (isExcelFile(file)) {
+          jsonData = await parseExcel(file);
+          toast.success('Fichier Excel chargé avec succès');
+        } else if (isCSVFile(file)) {
+          jsonData = await parseCSV(file);
+          toast.success('Fichier CSV chargé avec succès');
+        } else {
+          throw new Error('Format de fichier non supporté');
+        }
+      } catch (parseError: any) {
+        console.error('Erreur de parsing:', parseError);
+        throw new Error('Erreur lors de la lecture du fichier. Vérifiez que le fichier n\'est pas corrompu.');
       }
 
-      if (jsonData.length === 0) {
+      if (!jsonData || jsonData.length === 0) {
         setImportErrors(['Le fichier est vide']);
         toast.error('Le fichier est vide');
         return;
       }
 
+      // Vérifier la structure des données
       const columns = Object.keys(jsonData[0]);
+      if (columns.length === 0) {
+        throw new Error('Le fichier ne contient pas de colonnes valides');
+      }
+
       setAvailableColumns(columns);
-      
-      // Auto-map columns
       const autoMapping = autoMapColumns(columns);
       setColumnMapping(autoMapping);
-      
       setTempFileData(jsonData);
       setShowMappingDialog(true);
 
-      // Show toast with mapping results
       const mappedCount = Object.keys(autoMapping).length;
       const unmappedCount = columns.length - mappedCount;
       
       if (mappedCount > 0) {
         toast.success(`${mappedCount} colonnes mappées automatiquement${unmappedCount > 0 ? ` (${unmappedCount} non mappées)` : ''}`);
       } else {
-        toast.warning('Aucune colonne n\'a pu être mappée automatiquement');
+        toast.error('Aucune colonne n\'a pu être mappée automatiquement');
       }
+
     } catch (error: any) {
       console.error('Error importing file:', error);
       setImportErrors([error.message || 'Format de fichier invalide ou corrompu']);
-      toast.error('Erreur lors de l\'importation du fichier');
+      toast.error(error.message || 'Erreur lors de l\'importation du fichier');
     } finally {
       setIsUploading(false);
     }
@@ -224,14 +262,17 @@ function ImportList() {
       }
 
       const importErrors: string[] = [];
-      const importPromises = transformedData.map(async (record, index) => {
+      let successCount = 0;
+
+      for (let i = 0; i < transformedData.length; i++) {
+        const record = transformedData[i];
         try {
           const { data, error } = await typedSupabase.rpc('import_household_data', {
             p_site_nom: record.siteDistribution?.trim() || 'Site par défaut',
             p_site_adresse: record.adresse?.trim() || '',
-            p_household_id: record.householdId?.trim() || `HH-${Date.now()}-${index}`,
-            p_nom_menage: record.nomMenage?.trim() || `Ménage ${index + 1}`,
-            p_token_number: record.tokenNumber?.trim() || `TK-${Date.now()}-${index}`,
+            p_household_id: record.householdId?.trim() || `HH-${Date.now()}-${i}`,
+            p_nom_menage: record.nomMenage?.trim() || `Ménage ${i + 1}`,
+            p_token_number: record.tokenNumber?.trim() || `TK-${Date.now()}-${i}`,
             p_nombre_beneficiaires: record.nombreBeneficiaires || 1,
             p_recipient_first_name: record.recipientFirstName?.trim() || 'Prénom',
             p_recipient_middle_name: record.recipientMiddleName?.trim() || null,
@@ -240,27 +281,36 @@ function ImportList() {
           });
 
           if (error) {
-            importErrors.push(`Ligne ${index + 2}: ${error.message}`);
-            return null;
+            importErrors.push(`Ligne ${i + 2}: ${error.message}`);
+          } else {
+            successCount++;
           }
-
-          return data;
         } catch (err: any) {
-          importErrors.push(`Ligne ${index + 2}: ${err.message}`);
-          return null;
+          importErrors.push(`Ligne ${i + 2}: ${err.message}`);
         }
-      });
 
-      const results = await Promise.all(importPromises);
+        // Update progress every 10 records
+        if (i % 10 === 0) {
+          toast.loading(`Importation en cours... ${i + 1}/${transformedData.length}`, {
+            id: 'import-progress'
+          });
+        }
+      }
+
+      toast.dismiss('import-progress');
       
       if (importErrors.length > 0) {
         setImportErrors(importErrors);
-        toast.error('Des erreurs sont survenues lors de l\'importation');
+        if (successCount > 0) {
+          toast.success(`${successCount} enregistrements importés avec succès`);
+        }
+        toast.error(`${importErrors.length} erreurs lors de l'importation`);
       } else {
         toast.success('Importation réussie');
         setShowMappingDialog(false);
-        fetchBeneficiaires();
       }
+
+      await fetchBeneficiaires();
     } catch (err: any) {
       console.error('Error importing data:', err);
       setError(err.message || 'Erreur lors de l\'importation des données');
@@ -273,6 +323,19 @@ function ImportList() {
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
+
+  const filteredBeneficiaires = useMemo(() => {
+    return beneficiaires.filter(b => {
+      const searchMatch = searchTerm === '' || 
+        Object.values(b).some(value => 
+          value && value.toString().toLowerCase().includes(searchTerm.toLowerCase())
+        );
+      
+      const siteMatch = filterSite === 'all' || b.siteDistribution === filterSite;
+      
+      return searchMatch && siteMatch;
+    });
+  }, [beneficiaires, searchTerm, filterSite]);
 
   return (
     <PageTransition>
@@ -340,6 +403,51 @@ function ImportList() {
             </Alert>
           )}
 
+          <Paper sx={{ mt: 3, height: 400 }}>
+            <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
+              <TextField
+                size="small"
+                placeholder="Rechercher..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                InputProps={{
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                }}
+                sx={{ width: 300 }}
+              />
+              <FormControl size="small" sx={{ width: 200 }}>
+                <InputLabel>Site</InputLabel>
+                <Select
+                  value={filterSite}
+                  onChange={(e) => setFilterSite(e.target.value)}
+                  label="Site"
+                >
+                  <MenuItem value="all">Tous les sites</MenuItem>
+                  {Array.from(new Set(beneficiaires.map(b => b.siteDistribution))).map(site => (
+                    <MenuItem key={site} value={site}>{site}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Box>
+            <DataGrid
+              rows={filteredBeneficiaires}
+              columns={columns}
+              loading={isLoading}
+              disableRowSelectionOnClick
+              autoPageSize
+              pageSizeOptions={[10, 25, 50]}
+              sx={{
+                '& .MuiDataGrid-cell': {
+                  py: 1,
+                },
+              }}
+            />
+          </Paper>
+
           <Dialog
             open={showMappingDialog}
             onClose={() => setShowMappingDialog(false)}
@@ -401,6 +509,7 @@ function ImportList() {
                 onClick={handleImportData}
                 variant="contained"
                 disabled={isLoading}
+                startIcon={isLoading && <CircularProgress size={20} />}
               >
                 {isLoading ? 'Importation...' : 'Importer les Données'}
               </Button>
