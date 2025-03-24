@@ -5,106 +5,77 @@ import {
   DialogContent,
   DialogActions,
   Button,
-  Grid,
   FormControl,
   InputLabel,
   Select,
   MenuItem,
-  Typography,
-  Alert,
+  Grid
 } from '@mui/material';
-import { REQUIRED_COLUMNS, OPTIONAL_COLUMNS } from '../lib/excelMapping';
 
-interface ColumnMappingDialogProps {
+export interface ColumnMappingDialogProps {
   open: boolean;
   onClose: () => void;
-  availableColumns: string[];
-  columnMapping: { [key: string]: string };
-  onMappingChange: (mapping: { [key: string]: string }) => void;
+  columnMapping: Record<string, string>;
+  onMappingChange: (newMapping: Record<string, string>) => void;
   onConfirm: () => void;
 }
+
+const requiredFields = [
+  'site_name',
+  'household_id',
+  'household_name',
+  'token_number',
+  'beneficiary_count',
+  'first_name',
+  'middle_name',
+  'last_name'
+];
+
+const fieldLabels: Record<string, string> = {
+  site_name: 'Nom du site',
+  household_id: 'ID Ménage',
+  household_name: 'Nom du ménage',
+  token_number: 'Numéro de jeton',
+  beneficiary_count: 'Nombre de bénéficiaires',
+  first_name: 'Prénom',
+  middle_name: 'Post-nom',
+  last_name: 'Nom'
+};
 
 const ColumnMappingDialog: React.FC<ColumnMappingDialogProps> = ({
   open,
   onClose,
-  availableColumns,
   columnMapping,
   onMappingChange,
-  onConfirm,
+  onConfirm
 }) => {
-  const handleMappingChange = (field: string, excelColumn: string) => {
-    const newMapping = { ...columnMapping, [field]: excelColumn };
-    onMappingChange(newMapping);
+  const handleChange = (field: string, value: string) => {
+    onMappingChange({
+      ...columnMapping,
+      [field]: value
+    });
   };
-
-  // Vérifier si tous les champs requis sont mappés
-  const isMappingComplete = () => {
-    return Object.keys(REQUIRED_COLUMNS).every(
-      (field) => columnMapping[field] && columnMapping[field] !== ''
-    );
-  };
-
-  // Obtenir les colonnes non mappées
-  const getUnmappedRequiredFields = () => {
-    return Object.entries(REQUIRED_COLUMNS)
-      .filter(([field]) => !columnMapping[field])
-      .map(([_, config]) => config.possibleNames[0]);
-  };
-
-  const unmappedFields = getUnmappedRequiredFields();
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
-      <DialogTitle>Mapper les colonnes Excel</DialogTitle>
+      <DialogTitle>Mapping des colonnes</DialogTitle>
       <DialogContent>
-        <Grid container spacing={2}>
-          <Grid item xs={12}>
-            <Typography variant="subtitle1" gutterBottom>
-              Colonnes requises
-            </Typography>
-          </Grid>
-          {Object.entries(REQUIRED_COLUMNS).map(([field, config]) => (
+        <Grid container spacing={2} sx={{ mt: 1 }}>
+          {requiredFields.map(field => (
             <Grid item xs={12} sm={6} key={field}>
               <FormControl fullWidth>
-                <InputLabel>{config.possibleNames[0]}</InputLabel>
+                <InputLabel>{fieldLabels[field]}</InputLabel>
                 <Select
                   value={columnMapping[field] || ''}
-                  onChange={(e) => handleMappingChange(field, e.target.value as string)}
-                  label={config.possibleNames[0]}
+                  onChange={(e) => handleChange(field, e.target.value as string)}
+                  label={fieldLabels[field]}
                 >
                   <MenuItem value="">
-                    <em>Sélectionner une colonne</em>
+                    <em>Non mappé</em>
                   </MenuItem>
-                  {availableColumns.map((column) => (
-                    <MenuItem key={column} value={column}>
-                      {column}
-                    </MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
-            </Grid>
-          ))}
-
-          <Grid item xs={12}>
-            <Typography variant="subtitle1" gutterBottom sx={{ mt: 2 }}>
-              Colonnes optionnelles
-            </Typography>
-          </Grid>
-          {Object.entries(OPTIONAL_COLUMNS).map(([field, config]) => (
-            <Grid item xs={12} sm={6} key={field}>
-              <FormControl fullWidth>
-                <InputLabel>{config.possibleNames[0]}</InputLabel>
-                <Select
-                  value={columnMapping[field] || ''}
-                  onChange={(e) => handleMappingChange(field, e.target.value as string)}
-                  label={config.possibleNames[0]}
-                >
-                  <MenuItem value="">
-                    <em>Sélectionner une colonne</em>
-                  </MenuItem>
-                  {availableColumns.map((column) => (
-                    <MenuItem key={column} value={column}>
-                      {column}
+                  {Object.values(columnMapping).map(header => (
+                    <MenuItem key={header} value={header}>
+                      {header}
                     </MenuItem>
                   ))}
                 </Select>
@@ -112,21 +83,10 @@ const ColumnMappingDialog: React.FC<ColumnMappingDialogProps> = ({
             </Grid>
           ))}
         </Grid>
-
-        {unmappedFields.length > 0 && (
-          <Alert severity="warning" sx={{ mt: 2 }}>
-            Colonnes requises non mappées : {unmappedFields.join(', ')}
-          </Alert>
-        )}
       </DialogContent>
       <DialogActions>
         <Button onClick={onClose}>Annuler</Button>
-        <Button
-          onClick={onConfirm}
-          variant="contained"
-          color="primary"
-          disabled={!isMappingComplete()}
-        >
+        <Button onClick={onConfirm} variant="contained" color="primary">
           Confirmer
         </Button>
       </DialogActions>

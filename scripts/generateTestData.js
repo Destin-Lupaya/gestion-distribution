@@ -2,35 +2,62 @@ import * as XLSX from 'xlsx';
 
 const data = [
   {
-    "Site": "Site A",
-    "ID Ménage": "HH001",
-    "Nom du Ménage": "Famille Dupont",
-    "Token": "TK001",
-    "Bénéficiaires": 4,
-    "Prénom": "Jean",
-    "Nom": "Dupont"
+    "site_name": "Kinshasa Centre",
+    "household_id": "HH001",
+    "token_number": "TK001",
+    "beneficiary_count": 4,
+    "first_name": "Jean",
+    "middle_name": "Pierre",
+    "last_name": "Dupont"
   },
   {
-    "Site": "Site B",
-    "ID Ménage": "HH002",
-    "Nom du Ménage": "Famille Martin",
-    "Token": "TK002",
-    "Bénéficiaires": 3,
-    "Prénom": "Marie",
-    "Nom": "Martin"
+    "site_name": "Goma Est",
+    "household_id": "HH002",
+    "token_number": "TK002",
+    "beneficiary_count": 3,
+    "first_name": "Marie",
+    "middle_name": "Claire",
+    "last_name": "Martin"
   },
   {
-    "Site": "Site A",
-    "ID Ménage": "HH003",
-    "Nom du Ménage": "Famille Bernard",
-    "Token": "TK003",
-    "Bénéficiaires": 5,
-    "Prénom": "Pierre",
-    "Nom": "Bernard"
+    "site_name": "Bukavu Sud",
+    "household_id": "HH003",
+    "token_number": "TK003",
+    "beneficiary_count": 5,
+    "first_name": "Paul",
+    "middle_name": "Jacques",
+    "last_name": "Dubois"
+  },
+  {
+    "site_name": "Lubumbashi Nord",
+    "household_id": "HH004",
+    "token_number": "TK004",
+    "beneficiary_count": 2,
+    "first_name": "Sophie",
+    "middle_name": "Anne",
+    "last_name": "Leroy"
+  },
+  {
+    "site_name": "Kisangani Ouest",
+    "household_id": "HH005",
+    "token_number": "TK005",
+    "beneficiary_count": 6,
+    "first_name": "Michel",
+    "middle_name": "Robert",
+    "last_name": "Bernard"
   }
 ];
 
-const workbook = XLSX.utils.book_new();
-const worksheet = XLSX.utils.json_to_sheet(data);
-XLSX.utils.book_append_sheet(workbook, worksheet, "Beneficiaires");
-XLSX.writeFile(workbook, "test_data.xlsx");
+// Créer un nouveau workbook
+const wb = XLSX.utils.book_new();
+
+// Convertir les données en feuille de calcul
+const ws = XLSX.utils.json_to_sheet(data);
+
+// Ajouter la feuille au workbook
+XLSX.utils.book_append_sheet(wb, ws, "Households");
+
+// Écrire le fichier
+XLSX.writeFile(wb, "test_data.xlsx");
+
+console.log("Fichier Excel généré avec succès : test_data.xlsx");

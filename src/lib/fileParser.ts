@@ -1,126 +1,92 @@
 import * as XLSX from 'xlsx';
-import Papa from 'papaparse';
+import { ImportRow } from '../types';
+import { suggestColumnMapping, transformData, validateData } from './excelMapping';
 
-interface ParseResult {
+export interface ParseResult {
   headers: string[];
   data: any[];
+  totalRows: number;
+  sample: any[];
 }
 
 export const isExcelFile = (file: File): boolean => {
-  const excelTypes = [
+  const allowedTypes = [
     'application/vnd.ms-excel',
-    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-    'application/vnd.ms-excel.sheet.macroEnabled.12'
+    'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
   ];
-  return excelTypes.includes(file.type) || file.name.toLowerCase().endsWith('.xlsx') || file.name.toLowerCase().endsWith('.xls');
+  return allowedTypes.includes(file.type);
 };
 
-export const isCSVFile = (file: File): boolean => {
-  return file.type === 'text/csv' || file.name.toLowerCase().endsWith('.csv');
-};
-
-export const validateFileType = (file: File): string | null => {
-  if (!file) return 'Aucun fichier sélectionné';
-  if (!isExcelFile(file) && !isCSVFile(file)) {
-    return 'Format de fichier non supporté. Veuillez utiliser un fichier Excel (.xlsx, .xls) ou CSV (.csv)';
-  }
-  return null;
-};
-
-export const parseExcel = async (file: File): Promise<ParseResult> => {
+export async function parseExcelFile(file: File): Promise<ParseResult> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
 
-    reader.onload = (e) => {
+    reader.onload = (e: ProgressEvent<FileReader>) => {
       try {
-        if (!e.target?.result) {
-          throw new Error('Erreur lors de la lecture du fichier');
-        }
-
-        let data: Uint8Array;
-        if (e.target.result instanceof ArrayBuffer) {
-          data = new Uint8Array(e.target.result);
-        } else {
-          throw new Error('Format de fichier invalide');
-        }
-
-        const workbook = XLSX.read(data, { type: 'array' });
-        
-        if (!workbook.SheetNames.length) {
-          throw new Error('Le fichier Excel ne contient aucune feuille');
-        }
-
+        const data = e.target?.result;
+        const workbook = XLSX.read(data, { type: 'binary' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
-        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { 
-          header: 1,
-          defval: '', // Valeur par défaut pour les cellules vides
-          raw: false // Convertir les nombres en chaînes
+        
+        // Convertir en tableau d'objets
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { header: 1 });
+        
+        // Extraire les en-têtes (première ligne)
+        const headers = jsonData[0] as string[];
+        
+        // Convertir le reste des données en objets
+        const rows = XLSX.utils.sheet_to_json(firstSheet);
+        
+        // Créer un échantillon des 2 premières lignes
+        const sample = rows.slice(0, 2);
+
+        resolve({
+          headers,
+          data: rows,
+          totalRows: rows.length,
+          sample
         });
-
-        if (!Array.isArray(jsonData) || jsonData.length < 2) {
-          throw new Error('Le fichier est vide ou ne contient pas de données');
-        }
-
-        const headers = (jsonData[0] as string[]).map(h => String(h).trim());
-        if (headers.some(h => !h)) {
-          throw new Error('Certains en-têtes de colonnes sont vides');
-        }
-
-        const rows = jsonData.slice(1).map((row: any) => {
-          const rowData: { [key: string]: any } = {};
-          headers.forEach((header, index) => {
-            rowData[header] = row[index] !== undefined ? String(row[index]).trim() : '';
-          });
-          return rowData;
-        });
-
-        resolve({ headers, data: rows });
       } catch (error) {
-        reject(new Error('Erreur lors de la lecture du fichier Excel: ' + (error instanceof Error ? error.message : 'erreur inconnue')));
+        reject(error);
       }
     };
 
-    reader.onerror = () => {
-      reject(new Error('Erreur lors de la lecture du fichier'));
+    reader.onerror = (error) => reject(error);
+    reader.readAsBinaryString(file);
+  });
+}
+
+export async function processExcelFile(file: File): Promise<{
+  data: ImportRow[];
+  mapping: Record<string, string>;
+  validation: { isValid: boolean; errors: string[] };
+}> {
+  try {
+    // Analyser le fichier Excel
+    const { headers, data } = await parseExcelFile(file);
+    console.log('Parsing Excel file...');
+    console.log('File headers:', headers);
+    console.log('First row:', data[0]);
+    console.log('Total rows:', data.length);
+
+    // Suggérer le mapping des colonnes
+    const mapping = suggestColumnMapping(headers);
+    console.log('Column mapping:', mapping);
+
+    // Transformer les données
+    const transformedData = transformData(data, mapping);
+    console.log('Sample data:', transformedData.slice(0, 2));
+
+    // Valider les données
+    const validation = validateData(transformedData);
+    console.log('Validation result:', validation);
+
+    return {
+      data: transformedData,
+      mapping,
+      validation
     };
-
-    reader.readAsArrayBuffer(file);
-  });
-};
-
-export const parseCSV = async (file: File): Promise<ParseResult> => {
-  return new Promise((resolve, reject) => {
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      transformHeader: (header: string) => header.trim(),
-      transform: (value: string) => value.trim(),
-      complete: (results) => {
-        if (results.errors.length > 0) {
-          reject(new Error('Erreur lors de la lecture du fichier CSV: ' + results.errors[0].message));
-          return;
-        }
-
-        const headers = results.meta.fields || [];
-        if (headers.some(h => !h)) {
-          reject(new Error('Certains en-têtes de colonnes sont vides'));
-          return;
-        }
-
-        resolve({ 
-          headers, 
-          data: results.data.map((row: any) => {
-            const cleanRow: { [key: string]: string } = {};
-            headers.forEach(header => {
-              cleanRow[header] = row[header] !== undefined ? String(row[header]).trim() : '';
-            });
-            return cleanRow;
-          })
-        });
-      },
-      error: (error) => {
-        reject(new Error('Erreur lors de la lecture du fichier CSV: ' + error.message));
-      }
-    });
-  });
-};
+  } catch (error) {
+    console.error('Error processing Excel file:', error);
+    throw error;
+  }
+}

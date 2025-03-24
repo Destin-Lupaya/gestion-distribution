@@ -1,28 +1,27 @@
 import React, { useState, useEffect } from 'react';
-import { 
+import {
   DataGrid as MuiDataGrid,
   GridColDef,
-  GridValueGetterParams,
-  GridRowSelectionModel,
-  GridDensity,
-  GridFilterModel,
   GridToolbarContainer,
-  GridToolbarExport,
   GridToolbarFilterButton,
   GridToolbarDensitySelector,
   GridToolbarColumnsButton,
+  GridFilterModel,
   GridFilterOperator,
+  GridRowSelectionModel,
+  GridDensity,
+  GridFilterItem,
   frFR
 } from '@mui/x-data-grid';
-import { 
-  Box, 
-  Typography, 
+import {
+  Box,
+  IconButton,
+  Typography,
   Paper,
   Tabs,
   Tab,
   Button,
   Stack,
-  IconButton,
   Tooltip,
   Dialog,
   DialogTitle,
@@ -33,25 +32,20 @@ import {
   Collapse,
   LinearProgress,
   Fade,
-  Chip,
-  Menu,
-  MenuItem,
-  Divider
+  Chip
 } from '@mui/material';
-import { useDatabase } from '../hooks/useDatabase';
-import { format } from 'date-fns';
-import { fr } from 'date-fns/locale';
+import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
 import FileDownloadIcon from '@mui/icons-material/FileDownload';
 import VisibilityIcon from '@mui/icons-material/Visibility';
 import PeopleIcon from '@mui/icons-material/People';
 import BarChartIcon from '@mui/icons-material/BarChart';
-import FilterListIcon from '@mui/icons-material/FilterList';
-import DeleteIcon from '@mui/icons-material/Delete';
-import EditIcon from '@mui/icons-material/Edit';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import PrintIcon from '@mui/icons-material/Print';
-import FileUploadIcon from '@mui/icons-material/FileUpload';
-import MoreVertIcon from '@mui/icons-material/MoreVert';
+
+import { useDatabase } from '../hooks/useDatabase';
+import { format } from 'date-fns';
+import { fr } from 'date-fns/locale';
 import * as XLSX from 'xlsx';
 import { testConnection } from '../config/database';
 
@@ -774,12 +768,16 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
     }
   };
 
+  interface FilterParams {
+    value: any;
+  }
+
   const filterOperators: GridFilterOperator[] = [
     {
       label: 'contient',
       value: 'contains',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase().includes(filterItem.value.toString().toLowerCase());
         };
@@ -788,8 +786,8 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
     {
       label: 'égal à',
       value: 'equals',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase() === filterItem.value.toString().toLowerCase();
         };
@@ -798,8 +796,8 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
     {
       label: 'commence par',
       value: 'startsWith',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase().startsWith(filterItem.value.toString().toLowerCase());
         };
@@ -808,8 +806,8 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
     {
       label: 'finit par',
       value: 'endsWith',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase().endsWith(filterItem.value.toString().toLowerCase());
         };
@@ -821,8 +819,8 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
     {
       label: 'est le',
       value: 'is',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           const filterDate = new Date(filterItem.value);
           const paramDate = new Date(params.value);
@@ -837,8 +835,8 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
     {
       label: 'est après le',
       value: 'after',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return new Date(params.value) > new Date(filterItem.value);
         };
@@ -847,8 +845,8 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
     {
       label: 'est avant le',
       value: 'before',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return new Date(params.value) < new Date(filterItem.value);
         };
@@ -886,8 +884,44 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
 };
 
 // Composant pour la grille de données
-const DataGridView: React.FC = () => {
-  const [tabIndex, setTabIndex] = useState(1); // 1 pour l'onglet "Ménages"
+interface DataGridViewProps {
+  rows: any[];
+  columns: GridColDef[];
+  loading?: boolean;
+  error?: string;
+  onRowClick?: (params: any) => void;
+  onSelectionModelChange?: (selectionModel: GridRowSelectionModel) => void;
+  selectionModel?: GridRowSelectionModel;
+}
+
+const DataGridView: React.FC<DataGridViewProps> = ({
+  rows,
+  columns,
+  loading: externalLoading,
+  error: externalError,
+  onRowClick,
+  onSelectionModelChange,
+  selectionModel: externalSelectionModel
+}) => {
+  const [tabIndex, setTabIndex] = useState(1); 
+  const [pageSize, setPageSize] = useState<number>(10);
+  const [density, setDensity] = useState<GridDensity>('standard');
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({
+    items: [],
+  });
+
+  const { 
+    isLoading, 
+    error: dbError, 
+    getAllSites,
+    getAllHouseholds,
+    getAllRecipients,
+    getAllDistributions 
+  } = useDatabase();
+
+  const loading = externalLoading || isLoading;
+  const error = externalError || dbError;
+
   const [data, setData] = useState<GridData>({
     sites: [],
     households: [],
@@ -896,25 +930,12 @@ const DataGridView: React.FC = () => {
   });
   const [rowSelectionModel, setRowSelectionModel] = useState<GridRowSelectionModel>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [density, setDensity] = useState<GridDensity>('standard');
   const [statsDialogOpen, setStatsDialogOpen] = useState(false);
-  const [filterModel, setFilterModel] = useState<GridFilterModel>({
-    items: []
-  });
   const [paginationModel, setPaginationModel] = useState({
     pageSize: 10,
     page: 0
   });
   const [refreshKey, setRefreshKey] = useState(0);
-
-  const { 
-    isLoading, 
-    error, 
-    getAllSites,
-    getAllHouseholds,
-    getAllRecipients,
-    getAllDistributions
-  } = useDatabase();
 
   useEffect(() => {
     const loadData = async () => {
@@ -1249,12 +1270,16 @@ const DataGridView: React.FC = () => {
     }
   };
 
+  interface FilterParams {
+    value: any;
+  }
+
   const filterOperators: GridFilterOperator[] = [
     {
       label: 'contient',
       value: 'contains',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase().includes(filterItem.value.toString().toLowerCase());
         };
@@ -1263,8 +1288,8 @@ const DataGridView: React.FC = () => {
     {
       label: 'égal à',
       value: 'equals',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase() === filterItem.value.toString().toLowerCase();
         };
@@ -1273,8 +1298,8 @@ const DataGridView: React.FC = () => {
     {
       label: 'commence par',
       value: 'startsWith',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase().startsWith(filterItem.value.toString().toLowerCase());
         };
@@ -1283,8 +1308,8 @@ const DataGridView: React.FC = () => {
     {
       label: 'finit par',
       value: 'endsWith',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return params.value.toString().toLowerCase().endsWith(filterItem.value.toString().toLowerCase());
         };
@@ -1296,8 +1321,8 @@ const DataGridView: React.FC = () => {
     {
       label: 'est le',
       value: 'is',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           const filterDate = new Date(filterItem.value);
           const paramDate = new Date(params.value);
@@ -1312,8 +1337,8 @@ const DataGridView: React.FC = () => {
     {
       label: 'est après le',
       value: 'after',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return new Date(params.value) > new Date(filterItem.value);
         };
@@ -1322,8 +1347,8 @@ const DataGridView: React.FC = () => {
     {
       label: 'est avant le',
       value: 'before',
-      getApplyFilterFn: (filterItem) => {
-        return (params): boolean => {
+      getApplyFilterFn: (filterItem: GridFilterItem) => {
+        return (params: { value: string }) => {
           if (!filterItem.value || !params.value) return false;
           return new Date(params.value) < new Date(filterItem.value);
         };
@@ -1459,7 +1484,7 @@ const DataGridView: React.FC = () => {
               pageSizeOptions={[5, 10, 20, 50]}
               checkboxSelection
               disableRowSelectionOnClick
-              loading={isLoading}
+              loading={loading}
               components={{
                 Toolbar: CustomToolbar
               }}

@@ -1,6 +1,7 @@
 const express = require('express');
 const cors = require('cors');
 const mysql = require('mysql2/promise');
+const { REQUIRED_COLUMNS, suggestColumnMapping, validateExcelColumns, validateExcelData } = require('./lib/excelMapping');
 require('dotenv').config();
 
 const app = express();
@@ -292,6 +293,7 @@ app.delete('/api/households/:id', async (req, res) => {
 
 // Route pour créer des ménages et des bénéficiaires à partir des données Excel
 app.post('/api/import', async (req, res) => {
+  console.log('Requête reçue pour /api/import:', req.body);
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -300,55 +302,132 @@ app.post('/api/import', async (req, res) => {
     const results = [];
 
     for (const row of data) {
-      // Créer ou récupérer le site
-      let siteId = null;
-      if (row.siteDistribution) {
-        const [sites] = await connection.query(
-          'SELECT id FROM sites WHERE name = ?',
-          [row.siteDistribution]
-        );
-        if (sites.length > 0) {
-          siteId = sites[0].id;
-        } else {
-          const [result] = await connection.query(
-            'INSERT INTO sites (name, address) VALUES (?, ?)',
-            [row.siteDistribution, row.adresse || null]
-          );
-          siteId = result.insertId;
-        }
-      }
-
-      // Créer le ménage
-      const [householdResult] = await connection.query(
-        'INSERT INTO households (site_name, household_id, token_number, beneficiary_count, first_name, middle_name, last_name) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [
-          row.siteDistribution,
-          row.nomMenage,
-          row.tokenNumber,
-          parseInt(row.nombreBeneficiaires) || 0,
-          row.recipientFirstName,
-          row.recipientMiddleName || null,
-          row.recipientLastName || null
-        ]
+      // Vérifier si le ménage existe déjà
+      const [existingHouseholds] = await connection.query(
+        'SELECT id FROM households WHERE site_name = ? AND household_id = ?',
+        [row.site_name, row.household_id]
       );
 
-      const householdId = householdResult.insertId;
+      if (existingHouseholds.length > 0) {
+        // Mettre à jour le ménage existant
+        await connection.query(
+          `UPDATE households 
+           SET token_number = ?,
+               beneficiary_count = ?,
+               first_name = ?,
+               middle_name = ?,
+               last_name = ?,
+               updated_at = CURRENT_TIMESTAMP
+           WHERE id = ?`,
+          [
+            row.token_number,
+            parseInt(row.beneficiary_count) || 0,
+            row.first_name,
+            row.middle_name,
+            row.last_name,
+            existingHouseholds[0].id
+          ]
+        );
 
-      results.push({
-        success: true,
-        householdId,
-        message: 'Household and recipients created successfully'
-      });
+        results.push({
+          success: true,
+          householdId: existingHouseholds[0].id,
+          message: 'Household updated successfully'
+        });
+      } else {
+        // Créer un nouveau ménage
+        const [householdResult] = await connection.query(
+          `INSERT INTO households (
+            site_name,
+            household_id,
+            token_number,
+            beneficiary_count,
+            first_name,
+            middle_name,
+            last_name
+          ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+          [
+            row.site_name,
+            row.household_id,
+            row.token_number,
+            parseInt(row.beneficiary_count) || 0,
+            row.first_name,
+            row.middle_name,
+            row.last_name
+          ]
+        );
+
+        results.push({
+          success: true,
+          householdId: householdResult.insertId,
+          message: 'Household created successfully'
+        });
+      }
     }
 
     await connection.commit();
-    res.json({ success: true, results });
+    console.log('Import terminé avec succès:', results);
+    res.json({ 
+      success: true, 
+      message: 'Import completed successfully',
+      results 
+    });
   } catch (error) {
     await connection.rollback();
     console.error('Error importing data:', error);
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ 
+      success: false,
+      error: 'Erreur lors de l\'importation',
+      details: error.message
+    });
   } finally {
     connection.release();
+  }
+});
+
+// Route pour suggérer le mapping des colonnes
+app.post('/api/suggest-mapping', async (req, res) => {
+  try {
+    console.log('Requête reçue pour /api/suggest-mapping:', req.body);
+    const { headers } = req.body;
+    
+    if (!headers || !Array.isArray(headers)) {
+      return res.status(400).json({ 
+        error: 'Les en-têtes de colonnes sont requis et doivent être un tableau' 
+      });
+    }
+
+    const validation = validateExcelColumns(headers);
+    console.log('Validation des colonnes:', validation);
+
+    res.json({
+      mapping: validation.mapping,
+      isValid: validation.isValid,
+      missingColumns: validation.missingColumns
+    });
+  } catch (error) {
+    console.error('Erreur lors de la suggestion du mapping:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la suggestion du mapping des colonnes',
+      details: error.message 
+    });
+  }
+});
+
+// Route pour valider les données Excel
+app.post('/api/validate-data', (req, res) => {
+  console.log('Requête reçue pour /api/validate-data:', req.body);
+  try {
+    const { data } = req.body;
+    if (!data || !Array.isArray(data)) {
+      return res.status(400).json({ error: 'Données invalides' });
+    }
+
+    const validation = validateExcelData(data);
+    res.json(validation);
+  } catch (error) {
+    console.error('Erreur lors de la validation des données:', error);
+    res.status(500).json({ error: 'Erreur lors de la validation des données' });
   }
 });
 

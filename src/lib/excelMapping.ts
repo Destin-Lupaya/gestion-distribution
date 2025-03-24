@@ -76,7 +76,7 @@ export const REQUIRED_COLUMNS = {
       return null;
     }
   }
-};
+} as const;
 
 // Colonnes optionnelles
 export const OPTIONAL_COLUMNS = {
@@ -96,145 +96,179 @@ export const OPTIONAL_COLUMNS = {
       return null;
     }
   }
-};
+} as const;
 
-// Define column mapping types
-export interface ExcelColumnMapping {
-  excelField: string;
-  appField: keyof ImportRow;
-  required: boolean;
-  type: 'string' | 'number' | 'boolean';
-  validate?: (value: any) => string | null;
-  isFirstColumn?: boolean;
-  possibleMatches?: string[];
-}
+export const expectedFields = [
+  'site_name',
+  'household_id',
+  'household_name',
+  'token_number',
+  'beneficiary_count',
+  'first_name',
+  'middle_name',
+  'last_name'
+] as const;
 
-// Define available mappings with validation and possible matches
-export const EXCEL_MAPPINGS: Record<string, ExcelColumnMapping> = {
-  'Site de distribution': {
-    excelField: 'site_name',
-    appField: 'site_name',
-    required: false,
-    type: 'string',
-    validate: (value) => null,
-    isFirstColumn: true,
-    possibleMatches: ['site', 'site distribution', 'site de distribution', 'lieu', 'lieu de distribution', 'centre', 'distribution site', 'location']
+export const columnDefinitions = {
+  site_name: {
+    field: 'site_name',
+    headerName: 'Site',
+    alternateNames: ['Site', 'Nom du site', 'Site de distribution']
   },
-  'Adresse': {
-    excelField: 'site_address',
-    appField: 'site_address',
-    required: false,
-    type: 'string',
-    validate: (value) => null,
-    possibleMatches: ['adresse', 'address', 'localisation', 'location', 'site address', 'adresse site']
+  household_id: {
+    field: 'household_id',
+    headerName: 'ID Ménage',
+    alternateNames: ['Household ID', 'ID Ménage', 'Code Ménage']
   },
-  'Household ID': {
-    excelField: 'household_id',
-    appField: 'household_id',
-    required: false,
-    type: 'string',
-    validate: (value) => null,
-    possibleMatches: ['household id', 'id menage', 'id du menage', 'household', 'menage id', 'code menage', 'household code']
+  household_name: {
+    field: 'household_name',
+    headerName: 'Nom du Ménage',
+    alternateNames: ['Nom du Ménage', 'Ménage', 'Household']
   },
-  'Nom du Ménage': {
-    excelField: 'household_name',
-    appField: 'household_name',
-    required: true,
-    type: 'string',
-    validate: (value) => !value ? 'Le nom du ménage est requis' : null,
-    possibleMatches: ['nom du menage', 'nom menage', 'household name', 'nom', 'name', 'menage']
+  token_number: {
+    field: 'token_number',
+    headerName: 'Token',
+    alternateNames: ['Token', 'Numéro de jeton', 'Jeton']
   },
-  'Token Number': {
-    excelField: 'token_number',
-    appField: 'token_number',
-    required: false,
-    type: 'string',
-    validate: (value) => null,
-    possibleMatches: ['token', 'token number', 'numero token', 'token id', 'token #', 'code token', 'token code']
+  beneficiary_count: {
+    field: 'beneficiary_count',
+    headerName: 'Bénéficiaires',
+    alternateNames: ['Bénéficiaires', 'Nombre de bénéficiaires', 'Beneficiaries']
   },
-  'Recipient First Name': {
-    excelField: 'first_name',
-    appField: 'first_name',
-    required: true,
-    type: 'string',
-    validate: (value) => !value ? 'Le prénom du bénéficiaire est requis' : null,
-    possibleMatches: ['prenom', 'first name', 'prénom', 'recipient first name', 'prenom beneficiaire', 'prenom principal']
+  first_name: {
+    field: 'first_name',
+    headerName: 'Prénom',
+    alternateNames: ['Prénom', 'Prénom du bénéficiaire', 'First name']
   },
-  'Recipient Middle Name': {
-    excelField: 'middle_name',
-    appField: 'middle_name',
-    required: true,
-    type: 'string',
-    validate: (value) => !value ? 'Le post-nom du bénéficiaire est requis' : null,
-    possibleMatches: ['middle name', 'deuxieme prenom', 'autre prenom', 'second prenom', 'post-nom']
+  middle_name: {
+    field: 'middle_name',
+    headerName: 'Post-nom',
+    alternateNames: ['Post-Nom', 'Deuxième prénom', 'Middle name']
   },
-  'Recipient Last Name': {
-    excelField: 'last_name',
-    appField: 'last_name',
-    required: true,
-    type: 'string',
-    validate: (value) => !value ? 'Le nom de famille du bénéficiaire est requis' : null,
-    possibleMatches: ['nom', 'last name', 'nom de famille', 'recipient last name', 'nom beneficiaire']
-  },
-  'Nombre des Bénéficiaires Enrôlés': {
-    excelField: 'beneficiary_count',
-    appField: 'beneficiary_count',
-    required: false,
-    type: 'number',
-    validate: (value) => {
-      if (!value) return null;
-      const num = Number(value);
-      if (isNaN(num)) return 'Le nombre de bénéficiaires doit être un nombre';
-      if (num < 0) return 'Le nombre de bénéficiaires ne peut pas être négatif';
-      if (num > 100) return 'Le nombre de bénéficiaires semble trop élevé';
-      return null;
-    },
-    possibleMatches: ['nombre beneficiaires', 'nb beneficiaires', 'beneficiaires', 'total beneficiaires', 'nombre', 'total', 'household size', 'taille menage']
-  },
-  'Nom Suppléant': {
-    excelField: 'alternate_recipient',
-    appField: 'alternate_recipient',
-    required: false,
-    type: 'string',
-    validate: (value) => null,
-    possibleMatches: ['suppleant', 'alternate', 'remplacant', 'nom suppleant', 'alternate name', 'nom remplacant']
+  last_name: {
+    field: 'last_name',
+    headerName: 'Nom',
+    alternateNames: ['Nom', 'Nom de famille', 'Last name']
   }
-};
+} as const;
 
-interface FieldOption {
-  value: keyof ImportRow;
-  label: string;
-  required: boolean;
-}
-
-export function getFieldOptions(): FieldOption[] {
-  return [
-    { value: 'site_name', label: 'Nom du Site', required: true },
-    { value: 'site_address', label: 'Adresse du Site', required: false },
-    { value: 'household_id', label: 'ID du Ménage', required: true },
-    { value: 'household_name', label: 'Nom du Ménage', required: true },
-    { value: 'token_number', label: 'Token', required: true },
-    { value: 'beneficiary_count', label: 'Nombre de Bénéficiaires', required: true },
-    { value: 'first_name', label: 'Prénom', required: true },
-    { value: 'middle_name', label: 'Post-Nom', required: true },
-    { value: 'last_name', label: 'Nom', required: true },
-    { value: 'alternate_recipient', label: 'Suppléant', required: false }
-  ];
-}
-
-export function validateExcelRow(data: ImportRow): string | null {
-  const requiredFields = getFieldOptions().filter(f => f.required).map(f => f.value);
+function calculateSimilarity(str1: string, str2: string): number {
+  if (!str1 || !str2) return 0;
+  if (str1 === str2) return 1;
+  if (str1.toLowerCase().includes(str2.toLowerCase()) || str2.toLowerCase().includes(str1.toLowerCase())) return 0.8;
   
-  for (const field of requiredFields) {
-    if (!data[field]) {
-      return `Le champ "${getFieldOptions().find(f => f.value === field)?.label}" est requis`;
+  const words1 = str1.toLowerCase().split(/\s+/);
+  const words2 = str2.toLowerCase().split(/\s+/);
+  
+  const commonWords = words1.filter(word => words2.includes(word));
+  return commonWords.length / Math.max(words1.length, words2.length);
+}
+
+function findBestMatch(input: string, candidates: string[]): { bestMatch: string; score: number } {
+  let bestMatch = '';
+  let bestScore = 0;
+
+  for (const candidate of candidates) {
+    const score = calculateSimilarity(input, candidate);
+    console.log(`Comparing "${input}" with "${candidate}": score = ${score}`);
+    
+    if (score > bestScore) {
+      bestScore = score;
+      bestMatch = candidate;
     }
   }
 
-  if (data.beneficiary_count && isNaN(Number(data.beneficiary_count))) {
-    return 'Le nombre de bénéficiaires doit être un nombre';
+  return { bestMatch, score: bestScore };
+}
+
+export function suggestColumnMapping(headers: string[]): Record<string, string> {
+  console.log('Starting column mapping suggestion...');
+  console.log('Input headers:', headers);
+
+  const mapping: Record<string, string> = {};
+
+  for (const field of expectedFields) {
+    console.log(`Looking for matches for field: ${field}`);
+    
+    const definition = field in REQUIRED_COLUMNS 
+      ? REQUIRED_COLUMNS[field as keyof typeof REQUIRED_COLUMNS]
+      : OPTIONAL_COLUMNS[field as keyof typeof OPTIONAL_COLUMNS];
+
+    const candidates = [field, ...definition.possibleNames];
+
+    let bestMatch = '';
+    let bestScore = 0;
+
+    for (const header of headers) {
+      const { score } = findBestMatch(header, candidates);
+      if (score > bestScore) {
+        bestScore = score;
+        bestMatch = header;
+      }
+    }
+
+    if (bestScore >= 0.5) {
+      console.log(`Found match for ${field}: "${bestMatch}" (score: ${bestScore})`);
+      mapping[field] = bestMatch;
+    }
   }
 
+  console.log('Final mapping:', mapping);
+  return mapping;
+}
+
+export function transformData(data: any[], columnMapping: Record<string, string>): ImportRow[] {
+  return data.map(row => {
+    const transformedRow: ImportRow = {
+      site_name: row[columnMapping.site_name] || '',
+      household_id: row[columnMapping.household_id] || '',
+      household_name: row[columnMapping.household_name] || '',
+      token_number: row[columnMapping.token_number] || '',
+      beneficiary_count: parseInt(row[columnMapping.beneficiary_count]) || 0,
+      first_name: row[columnMapping.first_name] || '',
+      middle_name: row[columnMapping.middle_name] || '',
+      last_name: row[columnMapping.last_name] || ''
+    };
+
+    return transformedRow;
+  });
+}
+
+export function validateData(data: ImportRow[]): { isValid: boolean; errors: string[] } {
+  const errors: string[] = [];
+
+  for (let i = 0; i < data.length; i++) {
+    const row = data[i];
+    const rowNum = i + 1;
+
+    if (!row.site_name) {
+      errors.push(`Ligne ${rowNum}: Le site est requis`);
+    }
+
+    if (!row.household_id) {
+      errors.push(`Ligne ${rowNum}: L'ID du ménage est requis`);
+    }
+
+    if (!row.token_number) {
+      errors.push(`Ligne ${rowNum}: Le numéro de jeton est requis`);
+    }
+
+    if (row.beneficiary_count < 0) {
+      errors.push(`Ligne ${rowNum}: Le nombre de bénéficiaires doit être positif`);
+    }
+  }
+
+  return {
+    isValid: errors.length === 0,
+    errors
+  };
+}
+
+export function validateExcelRow(row: ImportRow): string | null {
+  if (!row.site_name) return 'Le site est requis';
+  if (!row.household_id) return "L'ID du ménage est requis";
+  if (!row.token_number) return 'Le numéro de jeton est requis';
+  if (row.beneficiary_count < 0) return 'Le nombre de bénéficiaires doit être positif';
   return null;
 }
 
@@ -277,107 +311,6 @@ export function transformExcelData(data: any[], columnMapping: { [key: string]: 
     errors
   };
 }
-
-// Fonction pour suggérer automatiquement le mapping des colonnes
-export function suggestColumnMapping(headers: string[]): { [key: string]: string } {
-  console.log('Starting column mapping suggestion...');
-  console.log('Input headers:', headers);
-
-  const mapping: { [key: string]: string } = {};
-  const normalizedHeaders = headers.map(h => ({
-    original: h,
-    normalized: normalizeText(h)
-  }));
-
-  // Pour chaque colonne requise
-  Object.entries(REQUIRED_COLUMNS).forEach(([fieldName, field]) => {
-    console.log(`Looking for matches for field: ${fieldName}`);
-    
-    let bestMatch = '';
-    let bestScore = 0;
-
-    // Pour chaque en-tête
-    normalizedHeaders.forEach(header => {
-      // Si cet en-tête n'a pas déjà été mappé
-      if (!Object.values(mapping).includes(header.original)) {
-        // Vérifier la similarité avec chaque nom possible
-        field.possibleNames.forEach(possibleName => {
-          const score = calculateSimilarity(header.original, possibleName);
-          console.log(`Comparing "${header.original}" with "${possibleName}": score = ${score}`);
-          
-          if (score > bestScore) {
-            bestScore = score;
-            bestMatch = header.original;
-          }
-        });
-      }
-    });
-
-    // Si on a trouvé une correspondance avec un score suffisant
-    if (bestScore >= 0.5) {
-      console.log(`Found match for ${fieldName}: "${bestMatch}" (score: ${bestScore})`);
-      mapping[fieldName] = bestMatch;
-    } else {
-      console.log(`No good match found for ${fieldName}`);
-    }
-  });
-
-  // Pour les colonnes optionnelles
-  Object.entries(OPTIONAL_COLUMNS).forEach(([fieldName, field]) => {
-    if (!mapping[fieldName]) { // Ne pas écraser les mappings existants
-      let bestMatch = '';
-      let bestScore = 0;
-
-      normalizedHeaders.forEach(header => {
-        if (!Object.values(mapping).includes(header.original)) {
-          field.possibleNames.forEach(possibleName => {
-            const score = calculateSimilarity(header.original, possibleName);
-            if (score > bestScore) {
-              bestScore = score;
-              bestMatch = header.original;
-            }
-          });
-        }
-      });
-
-      if (bestScore >= 0.5) {
-        mapping[fieldName] = bestMatch;
-      }
-    }
-  });
-
-  console.log('Final mapping:', mapping);
-  return mapping;
-};
-
-// Fonction pour normaliser le texte pour la comparaison
-export const normalizeText = (text: string): string => {
-  return text
-    .toLowerCase()
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '')
-    .replace(/[^a-z0-9]/g, ' ')
-    .trim();
-};
-
-// Fonction pour calculer la similarité entre deux chaînes
-const calculateSimilarity = (str1: string, str2: string): number => {
-  const s1 = normalizeText(str1);
-  const s2 = normalizeText(str2);
-
-  // Si les chaînes sont identiques après normalisation
-  if (s1 === s2) return 1;
-
-  // Si une chaîne est incluse dans l'autre
-  if (s1.includes(s2) || s2.includes(s1)) return 0.8;
-
-  // Compter les mots communs
-  const words1 = new Set(s1.split(' '));
-  const words2 = new Set(s2.split(' '));
-  const commonWords = [...words1].filter(word => words2.has(word));
-
-  return commonWords.length / Math.max(words1.size, words2.size);
-};
 
 export function validateExcelColumns(headers: string[]): { isValid: boolean; missingColumns: string[]; errors: string[] } {
   const missingColumns: string[] = [];
@@ -461,3 +394,84 @@ export function validateExcelData(data: any[]): { isValid: boolean; errors: stri
     errors
   };
 }
+
+export function suggestExcelColumnMapping(headers: string[]): { [key: string]: string } {
+  console.log('Starting column mapping suggestion...');
+  console.log('Input headers:', headers);
+
+  const mapping: { [key: string]: string } = {};
+  const normalizedHeaders = headers.map(h => ({
+    original: h,
+    normalized: normalizeText(h)
+  }));
+
+  // Pour chaque colonne requise
+  Object.entries(REQUIRED_COLUMNS).forEach(([fieldName, field]) => {
+    console.log(`Looking for matches for field: ${fieldName}`);
+    
+    let bestMatch = '';
+    let bestScore = 0;
+
+    // Pour chaque en-tête
+    normalizedHeaders.forEach(header => {
+      // Si cet en-tête n'a pas déjà été mappé
+      if (!Object.values(mapping).includes(header.original)) {
+        // Vérifier la similarité avec chaque nom possible
+        field.possibleNames.forEach(possibleName => {
+          const score = calculateSimilarity(header.original, possibleName);
+          console.log(`Comparing "${header.original}" with "${possibleName}": score = ${score}`);
+          
+          if (score > bestScore) {
+            bestScore = score;
+            bestMatch = header.original;
+          }
+        });
+      }
+    });
+
+    // Si on a trouvé une correspondance avec un score suffisant
+    if (bestScore >= 0.5) {
+      console.log(`Found match for ${fieldName}: "${bestMatch}" (score: ${bestScore})`);
+      mapping[fieldName] = bestMatch;
+    } else {
+      console.log(`No good match found for ${fieldName}`);
+    }
+  });
+
+  // Pour les colonnes optionnelles
+  Object.entries(OPTIONAL_COLUMNS).forEach(([fieldName, field]) => {
+    if (!mapping[fieldName]) { // Ne pas écraser les mappings existants
+      let bestMatch = '';
+      let bestScore = 0;
+
+      normalizedHeaders.forEach(header => {
+        if (!Object.values(mapping).includes(header.original)) {
+          field.possibleNames.forEach(possibleName => {
+            const score = calculateSimilarity(header.original, possibleName);
+            if (score > bestScore) {
+              bestScore = score;
+              bestMatch = header.original;
+            }
+          });
+        }
+      });
+
+      if (bestScore >= 0.5) {
+        mapping[fieldName] = bestMatch;
+      }
+    }
+  });
+
+  console.log('Final mapping:', mapping);
+  return mapping;
+};
+
+// Fonction pour normaliser le texte pour la comparaison
+export const normalizeText = (text: string): string => {
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]/g, ' ')
+    .trim();
+};
