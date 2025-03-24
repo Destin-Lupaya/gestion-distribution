@@ -1,11 +1,6 @@
 import { useState, useCallback } from 'react';
-import { databaseService } from '../services/databaseService';
-import type { 
-  Site, 
-  Household, 
-  Recipient, 
-  Distribution 
-} from '../services/databaseService';
+import * as databaseService from '../services/databaseService';
+import type { Site, Household, Recipient, Distribution } from '../types';
 
 export function useDatabase() {
   const [isLoading, setIsLoading] = useState(false);
@@ -80,7 +75,7 @@ export function useDatabase() {
     }
   }, []);
 
-  const getRecipientsByHousehold = useCallback(async (householdId: string) => {
+  const getRecipientsByHousehold = useCallback(async (householdId: number) => {
     setIsLoading(true);
     try {
       const recipients = await databaseService.getRecipientsByHousehold(householdId);
@@ -105,7 +100,20 @@ export function useDatabase() {
     }
   }, []);
 
-  const processQRCode = useCallback(async (qrData: { id: string }) => {
+  const createDistribution = useCallback(async (distribution: Omit<Distribution, 'id'>) => {
+    setIsLoading(true);
+    try {
+      const newDistribution = await databaseService.createDistribution(distribution);
+      setIsLoading(false);
+      return newDistribution;
+    } catch (error) {
+      handleError(error);
+      return null;
+    }
+  }, []);
+
+  // QR Code Functions
+  const processQRScan = useCallback(async (qrData: { id: string }) => {
     setIsLoading(true);
     try {
       const result = await databaseService.processQRScan(qrData);
@@ -117,39 +125,7 @@ export function useDatabase() {
     }
   }, []);
 
-  const saveSignatureAndDistribution = useCallback(async (
-    householdId: string,
-    recipientId: number,
-    signatureData: string,
-    notes?: string
-  ) => {
-    setIsLoading(true);
-    try {
-      // Sauvegarder la signature
-      const signatureId = await databaseService.saveSignature({
-        household_id: householdId,
-        recipient_id: recipientId,
-        signature_data: signatureData
-      });
-
-      // Créer la distribution
-      const distributionId = await databaseService.createDistribution({
-        household_id: householdId,
-        recipient_id: recipientId,
-        signature_id: signatureId,
-        status: 'completed',
-        notes
-      });
-
-      setIsLoading(false);
-      return { signatureId, distributionId };
-    } catch (error) {
-      handleError(error);
-      return null;
-    }
-  }, []);
-
-  const checkDistributionStatus = useCallback(async (householdId: string) => {
+  const checkQRStatus = useCallback(async (householdId: number) => {
     setIsLoading(true);
     try {
       const status = await databaseService.checkQRStatus(householdId);
@@ -164,19 +140,15 @@ export function useDatabase() {
   return {
     isLoading,
     error,
-    // Sites
     getAllSites,
-    // Households
     getAllHouseholds,
     getHouseholdByToken,
     getHouseholdsBySite,
-    // Recipients
     getAllRecipients,
     getRecipientsByHousehold,
-    // Distributions
     getAllDistributions,
-    processQRCode,
-    saveSignatureAndDistribution,
-    checkDistributionStatus
+    createDistribution,
+    processQRScan,
+    checkQRStatus
   };
 }

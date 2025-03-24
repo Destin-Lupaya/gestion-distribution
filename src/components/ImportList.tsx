@@ -1,18 +1,9 @@
-import React, { useState, useMemo, useEffect } from 'react';
-import { 
-  Paper, 
-  Button, 
+import React, { useState, useEffect, ChangeEvent, useMemo } from 'react';
+import {
+  Paper,
+  Button,
   Typography,
-  TextField,
-  MenuItem,
   Box,
-  IconButton,
-  Tooltip,
-  Alert,
-  Tabs,
-  Tab,
-  InputAdornment,
-  CircularProgress,
   Dialog,
   DialogTitle,
   DialogContent,
@@ -20,23 +11,50 @@ import {
   FormControl,
   InputLabel,
   Select,
+  MenuItem,
+  Grid,
+  IconButton,
+  Alert,
+  AlertTitle,
+  List,
+  ListItem,
+  ListItemText,
+  CircularProgress,
+  Tabs,
+  Tab,
+  TextField,
+  InputAdornment
 } from '@mui/material';
 import { DataGrid, GridColDef } from '@mui/x-data-grid';
+import { useNavigate } from 'react-router-dom';
 import SearchIcon from '@mui/icons-material/Search';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EditIcon from '@mui/icons-material/Edit';
+import CloseIcon from '@mui/icons-material/Close';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import { PageTransition } from './PageTransition';
 import ManualRegistration from './ManualRegistration';
+import ColumnMappingDialog from './ColumnMappingDialog';
 import toast from 'react-hot-toast';
-import { typedSupabase } from '../lib/supabase';
+import * as databaseService from '../services/databaseService';
 import { 
-  validateExcelRow, 
   transformExcelData, 
+  validateExcelData,
+  suggestColumnMapping, 
   getFieldOptions,
-  autoMapColumns
+  EXCEL_MAPPINGS,
+  ExcelColumnMapping,
+  validateExcelColumns,
+  validateExcelRow
 } from '../lib/excelMapping';
-import { Beneficiaire } from '../types';
-import { parseExcel, parseCSV, isExcelFile, isCSVFile, validateFileType } from '../lib/excelParser';
+import {
+  parseExcel,
+  parseCSV,
+  isExcelFile,
+  isCSVFile,
+  validateFileType
+} from '../lib/fileParser';
+import { Site, Household, Recipient } from '../types';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -46,6 +64,13 @@ interface TabPanelProps {
 
 interface ColumnMapping {
   [key: string]: string;
+}
+
+interface ImportStats {
+  totalRows: number;
+  validRows: number;
+  errorRows: number;
+  warnings: string[];
 }
 
 function TabPanel(props: TabPanelProps) {
@@ -70,7 +95,7 @@ function TabPanel(props: TabPanelProps) {
 
 function ImportList() {
   const [tabValue, setTabValue] = useState(0);
-  const [beneficiaires, setBeneficiaires] = useState<Beneficiaire[]>([]);
+  const [beneficiaires, setBeneficiaires] = useState<Recipient[]>([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterSite, setFilterSite] = useState('all');
   const [importErrors, setImportErrors] = useState<string[]>([]);
@@ -81,17 +106,40 @@ function ImportList() {
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [tempFileData, setTempFileData] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [sites, setSites] = useState<Site[]>([]);
+  const [importData, setImportData] = useState<any[]>([]);
+  const [importStats, setImportStats] = useState<ImportStats>({
+    totalRows: 0,
+    validRows: 0,
+    errorRows: 0,
+    warnings: []
+  });
   
   const fileInputRef = React.useRef<HTMLInputElement>(null);
 
+  useEffect(() => {
+    loadSites();
+  }, []);
+
+  const loadSites = async () => {
+    try {
+      const sitesList = await databaseService.getAllSites();
+      setSites(sitesList);
+    } catch (error) {
+      console.error('Error loading sites:', error);
+      toast.error('Erreur lors du chargement des sites');
+    }
+  };
+
   const columns: GridColDef[] = [
-    { field: 'siteDistribution', headerName: 'Site', flex: 1 },
-    { field: 'householdId', headerName: 'ID Ménage', flex: 1 },
-    { field: 'nomMenage', headerName: 'Nom du Ménage', flex: 1 },
-    { field: 'tokenNumber', headerName: 'Token', flex: 1 },
-    { field: 'nombreBeneficiaires', headerName: 'Bénéficiaires', width: 120, type: 'number' },
-    { field: 'recipientFirstName', headerName: 'Prénom', flex: 1 },
-    { field: 'recipientLastName', headerName: 'Nom', flex: 1 },
+    { field: 'site_name', headerName: 'Site', flex: 1 },
+    { field: 'household_id', headerName: 'ID Ménage', flex: 1 },
+    { field: 'household_name', headerName: 'Nom du Ménage', flex: 1 },
+    { field: 'token_number', headerName: 'Token', flex: 1 },
+    { field: 'beneficiary_count', headerName: 'Bénéficiaires', width: 120, type: 'number' },
+    { field: 'first_name', headerName: 'Prénom', flex: 1 },
+    { field: 'middle_name', headerName: 'Post-Nom', flex: 1 },
+    { field: 'last_name', headerName: 'Nom', flex: 1 },
     {
       field: 'actions',
       headerName: 'Actions',
@@ -108,294 +156,334 @@ function ImportList() {
     },
   ];
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: number) => {
+    if (!window.confirm('Êtes-vous sûr de vouloir supprimer ce bénéficiaire ?')) {
+      return;
+    }
+
     try {
-      const { error } = await typedSupabase
-        .from('menages')
-        .delete()
-        .eq('id', id);
-
-      if (error) throw error;
-
+      await databaseService.deleteRecipient(id);
       setBeneficiaires(prev => prev.filter(b => b.id !== id));
       toast.success('Bénéficiaire supprimé avec succès');
-    } catch (err) {
-      console.error('Error deleting beneficiary:', err);
+    } catch (error) {
+      console.error('Error deleting beneficiary:', error);
       toast.error('Erreur lors de la suppression');
     }
   };
 
-  const fetchBeneficiaires = async () => {
+  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const { data, error: fetchError } = await typedSupabase
-        .from('menages')
-        .select(`
-          id,
-          household_id,
-          nom_menage,
-          token_number,
-          nombre_beneficiaires,
-          sites_distribution!inner (
-            nom,
-            adresse
-          ),
-          beneficiaires!inner (
-            id,
-            first_name,
-            middle_name,
-            last_name,
-            est_principal
-          )
-        `)
-        .eq('beneficiaires.est_principal', true);
-
-      if (fetchError) throw fetchError;
-
-      if (data) {
-        const transformedData = data.map(item => ({
-          id: item.id,
-          siteDistribution: item.sites_distribution.nom,
-          adresse: item.sites_distribution.adresse,
-          householdId: item.household_id,
-          nomMenage: item.nom_menage,
-          tokenNumber: item.token_number,
-          recipientFirstName: item.beneficiaires[0].first_name,
-          recipientMiddleName: item.beneficiaires[0].middle_name,
-          recipientLastName: item.beneficiaires[0].last_name,
-          nombreBeneficiaires: item.nombre_beneficiaires,
-          nomSuppleant: null
-        }));
-
-        setBeneficiaires(transformedData);
-      }
-    } catch (err) {
-      console.error('Error fetching beneficiaires:', err);
-      setError('Erreur lors du chargement des données');
-      toast.error('Erreur lors du chargement des données');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  useEffect(() => {
-    fetchBeneficiaires();
-  }, []);
-
-  const handleFileUpload = async (file: File) => {
-    try {
-      setIsUploading(true);
-      setImportErrors([]);
-      setError(null);
-
-      if (!validateFileType(file)) {
-        throw new Error('Format de fichier non supporté. Utilisez Excel (.xlsx, .xls) ou CSV.');
-      }
-
-      let jsonData: any[];
-
-      try {
-        if (isExcelFile(file)) {
-          jsonData = await parseExcel(file);
-          toast.success('Fichier Excel chargé avec succès');
-        } else if (isCSVFile(file)) {
-          jsonData = await parseCSV(file);
-          toast.success('Fichier CSV chargé avec succès');
-        } else {
-          throw new Error('Format de fichier non supporté');
-        }
-      } catch (parseError: any) {
-        console.error('Erreur de parsing:', parseError);
-        throw new Error('Erreur lors de la lecture du fichier. Vérifiez que le fichier n\'est pas corrompu.');
-      }
-
-      if (!jsonData || jsonData.length === 0) {
-        setImportErrors(['Le fichier est vide']);
-        toast.error('Le fichier est vide');
+      const file = event.target.files?.[0];
+      if (!file) {
+        setError('Aucun fichier sélectionné');
         return;
       }
 
-      // Vérifier la structure des données
-      const columns = Object.keys(jsonData[0]);
-      if (columns.length === 0) {
-        throw new Error('Le fichier ne contient pas de colonnes valides');
+      // Valider le type de fichier
+      const fileError = validateFileType(file);
+      if (fileError) {
+        setError(fileError);
+        return;
       }
 
-      setAvailableColumns(columns);
-      const autoMapping = autoMapColumns(columns);
-      setColumnMapping(autoMapping);
-      setTempFileData(jsonData);
+      console.log('Parsing Excel file...');
+      
+      // Parser le fichier selon son type
+      const { headers, data } = isExcelFile(file) 
+        ? await parseExcel(file)
+        : await parseCSV(file);
+
+      console.log('File headers:', headers);
+      console.log('First row:', data[0]);
+      console.log('Total rows:', data.length);
+
+      if (!headers || !data || data.length === 0) {
+        setError('Le fichier ne contient pas de données valides');
+        return;
+      }
+
+      // Suggérer un mapping automatique
+      const suggestedMapping = suggestColumnMapping(headers);
+      console.log('Available columns:', headers);
+      console.log('Suggested mapping:', suggestedMapping);
+      console.log('Expected fields:', Object.keys(EXCEL_MAPPINGS));
+
+      // Vérifier que nous avons au moins quelques colonnes mappées
+      const mappedColumns = Object.values(suggestedMapping).filter(Boolean);
+      if (mappedColumns.length === 0) {
+        setError('Aucune colonne n\'a pu être mappée automatiquement. Veuillez vérifier le format du fichier.');
+        return;
+      }
+
+      // Mettre à jour l'état
+      setAvailableColumns(headers);
+      setColumnMapping(suggestedMapping);
+      setTempFileData(data);
       setShowMappingDialog(true);
 
-      const mappedCount = Object.keys(autoMapping).length;
-      const unmappedCount = columns.length - mappedCount;
-      
-      if (mappedCount > 0) {
-        toast.success(`${mappedCount} colonnes mappées automatiquement${unmappedCount > 0 ? ` (${unmappedCount} non mappées)` : ''}`);
-      } else {
-        toast.error('Aucune colonne n\'a pu être mappée automatiquement');
-      }
-
-    } catch (error: any) {
-      console.error('Error importing file:', error);
-      setImportErrors([error.message || 'Format de fichier invalide ou corrompu']);
-      toast.error(error.message || 'Erreur lors de l\'importation du fichier');
+    } catch (error) {
+      console.error('Erreur lors de l\'import :', error);
+      setError(error instanceof Error ? error.message : 'Erreur lors de l\'import du fichier');
     } finally {
-      setIsUploading(false);
+      setIsLoading(false);
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
     }
   };
 
-  const handleImportData = async () => {
-    try {
-      setIsLoading(true);
-      setError(null);
-      setImportErrors([]);
+  const handleImport = async () => {
+    setIsLoading(true);
+    setImportErrors([]);
 
-      const { data: transformedData, errors } = transformExcelData(tempFileData, columnMapping);
+    try {
+      console.log('tempFileData:', tempFileData);
+      console.log('columnMapping:', columnMapping);
+      
+      if (!Array.isArray(tempFileData)) {
+        console.error('Data is not an array:', tempFileData);
+        toast.error('Format de données invalide');
+        return;
+      }
+
+      // Générer le mapping automatiquement si aucun mapping n'est défini
+      const finalMapping = Object.keys(columnMapping).length === 0 
+        ? suggestColumnMapping(Object.keys(tempFileData[0] || {}))
+        : columnMapping;
+      
+      console.log('Using column mapping:', finalMapping);
+
+      const { data, errors } = transformExcelData(tempFileData, finalMapping);
       
       if (errors.length > 0) {
         setImportErrors(errors);
-        toast.error('Erreurs de validation dans les données');
+        toast.error(`Validation: ${errors.length} erreurs trouvées`);
         return;
       }
 
       const importErrors: string[] = [];
-      let successCount = 0;
+      const now = new Date().toISOString();
 
-      for (let i = 0; i < transformedData.length; i++) {
-        const record = transformedData[i];
+      for (const [index, row] of data.entries()) {
         try {
-          const { data, error } = await typedSupabase.rpc('import_household_data', {
-            p_site_nom: record.siteDistribution?.trim() || 'Site par défaut',
-            p_site_adresse: record.adresse?.trim() || '',
-            p_household_id: record.householdId?.trim() || `HH-${Date.now()}-${i}`,
-            p_nom_menage: record.nomMenage?.trim() || `Ménage ${i + 1}`,
-            p_token_number: record.tokenNumber?.trim() || `TK-${Date.now()}-${i}`,
-            p_nombre_beneficiaires: record.nombreBeneficiaires || 1,
-            p_recipient_first_name: record.recipientFirstName?.trim() || 'Prénom',
-            p_recipient_middle_name: record.recipientMiddleName?.trim() || null,
-            p_recipient_last_name: record.recipientLastName?.trim() || 'Nom',
-            p_nom_suppleant: record.nomSuppleant?.trim() || null
-          });
-
-          if (error) {
-            importErrors.push(`Ligne ${i + 2}: ${error.message}`);
-          } else {
-            successCount++;
+          let site;
+          if (row.site_name) {
+            site = await databaseService.createSite({
+              nom: row.site_name,
+              adresse: row.site_address || '',
+              created_at: now,
+              updated_at: now
+            });
           }
-        } catch (err: any) {
-          importErrors.push(`Ligne ${i + 2}: ${err.message}`);
-        }
 
-        // Update progress every 10 records
-        if (i % 10 === 0) {
-          toast.loading(`Importation en cours... ${i + 1}/${transformedData.length}`, {
-            id: 'import-progress'
+          const household = await databaseService.createHousehold({
+            site_id: site?.id,
+            nom_menage: row.household_name,
+            token_number: row.token_number || '',
+            nombre_beneficiaires: row.beneficiary_count || 0,
+            created_at: now,
+            updated_at: now
           });
+
+          await databaseService.createRecipient({
+            household_id: household.id,
+            first_name: row.first_name,
+            middle_name: row.middle_name || '',
+            last_name: row.last_name,
+            is_primary: true,
+            created_at: now,
+            updated_at: now
+          });
+
+          if (row.alternate_recipient) {
+            const [firstName, ...lastNameParts] = row.alternate_recipient.split(' ');
+            await databaseService.createRecipient({
+              household_id: household.id,
+              first_name: firstName,
+              middle_name: '',
+              last_name: lastNameParts.join(' ') || firstName,
+              is_primary: false,
+              created_at: now,
+              updated_at: now
+            });
+          }
+        } catch (error) {
+          console.error(`Error importing row ${index + 1}:`, error);
+          importErrors.push(`Ligne ${index + 1}: ${error.message || 'Erreur inconnue'}`);
         }
       }
 
-      toast.dismiss('import-progress');
-      
-      if (importErrors.length > 0) {
-        setImportErrors(importErrors);
-        if (successCount > 0) {
-          toast.success(`${successCount} enregistrements importés avec succès`);
-        }
-        toast.error(`${importErrors.length} erreurs lors de l'importation`);
-      } else {
-        toast.success('Importation réussie');
+      if (importErrors.length === 0) {
+        toast.success('Importation terminée avec succès');
         setShowMappingDialog(false);
+        setTempFileData([]);
+        setColumnMapping({});
+      } else {
+        setImportErrors(importErrors);
+        toast.error(`Importation terminée avec ${importErrors.length} erreurs`);
       }
-
-      await fetchBeneficiaires();
-    } catch (err: any) {
-      console.error('Error importing data:', err);
-      setError(err.message || 'Erreur lors de l\'importation des données');
+    } catch (error) {
+      console.error('Error during import:', error);
       toast.error('Erreur lors de l\'importation');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const handleAutoMap = () => {
+    const mapping = suggestColumnMapping(availableColumns);
+    setColumnMapping(mapping);
+  };
+
+  const handleMappingChange = (newMapping: { [key: string]: string }) => {
+    setColumnMapping(newMapping);
+  };
+
+  const handleMappingConfirm = () => {
+    try {
+      if (!tempFileData || tempFileData.length === 0) {
+        throw new Error('Aucune donnée à importer');
+      }
+
+      console.log('Starting data transformation...');
+      console.log('Column mapping:', columnMapping);
+      console.log('Sample data:', tempFileData.slice(0, 2));
+
+      // Transformer les données avec le mapping choisi
+      const transformedData = transformExcelData(tempFileData, columnMapping);
+      console.log('Transformation result:', {
+        rowCount: transformedData.data.length,
+        sampleRow: transformedData.data[0],
+        errorCount: transformedData.errors.length
+      });
+
+      // Valider les données
+      const dataValidation = validateExcelData(transformedData.data);
+      console.log('Validation result:', {
+        isValid: dataValidation.isValid,
+        errorCount: dataValidation.errors.length,
+        sampleErrors: dataValidation.errors.slice(0, 3)
+      });
+
+      if (!dataValidation.isValid) {
+        setError(
+          'Erreurs dans les données :\n' +
+          dataValidation.errors.join('\n')
+        );
+        return;
+      }
+
+      // Si tout est valide, afficher les données
+      setImportData(transformedData.data);
+      
+      // Afficher les statistiques
+      const stats = {
+        totalRows: transformedData.data.length,
+        validRows: transformedData.data.length,
+        errorRows: transformedData.errors.length,
+        warnings: transformedData.errors
+      };
+      console.log('Import stats:', stats);
+      setImportStats(stats);
+
+      setShowMappingDialog(false);
+      
+      // Afficher un message de succès
+      toast.success(`${transformedData.data.length} lignes importées avec succès`);
+
+    } catch (error) {
+      console.error('Erreur lors de la transformation :', error);
+      setError(error instanceof Error ? error.message : 'Erreur lors de la transformation des données');
+    }
   };
 
   const filteredBeneficiaires = useMemo(() => {
     return beneficiaires.filter(b => {
-      const searchMatch = searchTerm === '' || 
-        Object.values(b).some(value => 
-          value && value.toString().toLowerCase().includes(searchTerm.toLowerCase())
-        );
-      
-      const siteMatch = filterSite === 'all' || b.siteDistribution === filterSite;
-      
-      return searchMatch && siteMatch;
+      const matchesSearch = (
+        b.first_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        b.last_name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        b.household?.token_number.toLowerCase().includes(searchTerm.toLowerCase())
+      );
+
+      const matchesSite = filterSite === 'all' || b.household?.site_id.toString() === filterSite;
+
+      return matchesSearch && matchesSite;
     });
   }, [beneficiaires, searchTerm, filterSite]);
 
   return (
     <PageTransition>
-      <div className="space-y-6">
-        <Typography variant="h4" component="h1" gutterBottom>
-          Vérification de la Liste
-        </Typography>
-
-        <Tabs 
-          value={tabValue} 
-          onChange={handleTabChange}
-          variant="fullWidth"
-          sx={{
-            '& .MuiTab-root': {
-              minHeight: 64,
-              fontSize: '0.9rem',
-              fontWeight: 500
-            }
-          }}
-        >
-          <Tab label="Import Excel" />
-          <Tab label="Enregistrement Manuel" />
-        </Tabs>
+      <Paper sx={{ p: 3 }}>
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+          <Tabs value={tabValue} onChange={(e, v) => setTabValue(v)}>
+            <Tab label="Liste des Bénéficiaires" />
+            <Tab label="Enregistrement Manuel" />
+          </Tabs>
+        </Box>
 
         <TabPanel value={tabValue} index={0}>
-          <Paper className="p-6">
-            <Box sx={{ textAlign: 'center', py: 4 }}>
-              <input
-                type="file"
-                accept=".xlsx,.xls,.csv"
-                onChange={(e) => {
-                  const file = e.target.files?.[0];
-                  if (file) handleFileUpload(file);
-                }}
-                style={{ display: 'none' }}
-                ref={fileInputRef}
-              />
-              <Button
-                variant="outlined"
-                size="large"
-                startIcon={<UploadFileIcon />}
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isUploading}
-                sx={{ mb: 2 }}
+          <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center' }}>
+            <TextField
+              label="Rechercher"
+              variant="outlined"
+              size="small"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              InputProps={{
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <SearchIcon />
+                  </InputAdornment>
+                ),
+              }}
+              sx={{ width: 300 }}
+            />
+
+            <FormControl size="small" sx={{ minWidth: 200 }}>
+              <InputLabel>Filtrer par site</InputLabel>
+              <Select
+                value={filterSite}
+                onChange={(e) => setFilterSite(e.target.value)}
+                label="Filtrer par site"
               >
-                {isUploading ? 'Importation...' : 'Importer un fichier'}
-              </Button>
-              
-              <Typography variant="body2" color="text.secondary">
-                Formats supportés: .xlsx, .xls, .csv
-              </Typography>
-            </Box>
-          </Paper>
+                <MenuItem value="all">Tous les sites</MenuItem>
+                {sites.map((site) => (
+                  <MenuItem key={site.id} value={site.id.toString()}>
+                    {site.nom}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            <Box sx={{ flex: 1 }} />
+
+            <input
+              type="file"
+              accept=".xlsx,.xls,.csv"
+              onChange={handleFileUpload}
+              style={{ display: 'none' }}
+              ref={fileInputRef}
+            />
+
+            <Button
+              variant="contained"
+              startIcon={<UploadFileIcon />}
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+            >
+              {isUploading ? 'Importation...' : 'Importer'}
+            </Button>
+          </Box>
 
           {importErrors.length > 0 && (
-            <Alert severity="error" sx={{ mt: 2 }}>
+            <Alert severity="error" sx={{ mb: 3 }}>
               <Typography variant="subtitle2" gutterBottom>
                 Erreurs d'importation:
               </Typography>
-              <ul className="list-disc pl-4">
+              <ul style={{ margin: 0, paddingLeft: 20 }}>
                 {importErrors.map((error, index) => (
                   <li key={index}>{error}</li>
                 ))}
@@ -403,124 +491,86 @@ function ImportList() {
             </Alert>
           )}
 
-          <Paper sx={{ mt: 3, height: 400 }}>
-            <Box sx={{ p: 2, display: 'flex', gap: 2, alignItems: 'center' }}>
-              <TextField
-                size="small"
-                placeholder="Rechercher..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                InputProps={{
-                  startAdornment: (
-                    <InputAdornment position="start">
-                      <SearchIcon />
-                    </InputAdornment>
-                  ),
-                }}
-                sx={{ width: 300 }}
-              />
-              <FormControl size="small" sx={{ width: 200 }}>
-                <InputLabel>Site</InputLabel>
-                <Select
-                  value={filterSite}
-                  onChange={(e) => setFilterSite(e.target.value)}
-                  label="Site"
-                >
-                  <MenuItem value="all">Tous les sites</MenuItem>
-                  {Array.from(new Set(beneficiaires.map(b => b.siteDistribution))).map(site => (
-                    <MenuItem key={site} value={site}>{site}</MenuItem>
-                  ))}
-                </Select>
-              </FormControl>
+          {importStats.totalRows > 0 && (
+            <Box sx={{ mt: 2, mb: 2 }}>
+              <Typography variant="h6">Statistiques d'import</Typography>
+              <List>
+                <ListItem>
+                  <ListItemText 
+                    primary={`Total des lignes : ${importStats.totalRows}`}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary={`Lignes valides : ${importStats.validRows}`}
+                    secondary={`${Math.round((importStats.validRows / importStats.totalRows) * 100)}%`}
+                  />
+                </ListItem>
+                <ListItem>
+                  <ListItemText 
+                    primary={`Lignes avec erreurs : ${importStats.errorRows}`}
+                    secondary={importStats.errorRows > 0 ? 'Veuillez corriger les erreurs avant de continuer' : ''}
+                    sx={{ color: importStats.errorRows > 0 ? 'error.main' : 'inherit' }}
+                  />
+                </ListItem>
+              </List>
+
+              {/* Affichage des avertissements */}
+              {importStats.warnings.length > 0 && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  <AlertTitle>Avertissements</AlertTitle>
+                  <List>
+                    {importStats.warnings.map((warning, index) => (
+                      <ListItem key={index}>
+                        <ListItemText primary={warning} />
+                      </ListItem>
+                    ))}
+                  </List>
+                </Alert>
+              )}
             </Box>
+          )}
+
+          {error && (
+            <Alert severity="error" sx={{ mt: 2 }}>
+              <AlertTitle>Erreurs</AlertTitle>
+              <pre style={{ whiteSpace: 'pre-wrap', margin: 0 }}>
+                {error}
+              </pre>
+            </Alert>
+          )}
+
+          <div style={{ height: 600, width: '100%' }}>
             <DataGrid
               rows={filteredBeneficiaires}
               columns={columns}
-              loading={isLoading}
-              disableRowSelectionOnClick
-              autoPageSize
-              pageSizeOptions={[10, 25, 50]}
-              sx={{
-                '& .MuiDataGrid-cell': {
-                  py: 1,
-                },
+              initialState={{
+                pagination: {
+                  paginationModel: {
+                    pageSize: 10,
+                  }
+                }
               }}
+              pageSizeOptions={[10, 25, 50]}
+              disableRowSelectionOnClick
+              loading={isLoading}
             />
-          </Paper>
-
-          <Dialog
-            open={showMappingDialog}
-            onClose={() => setShowMappingDialog(false)}
-            maxWidth="md"
-            fullWidth
-          >
-            <DialogTitle>
-              Mapper les Colonnes
-            </DialogTitle>
-            <DialogContent>
-              <Box sx={{ mt: 2 }}>
-                <Typography variant="body2" color="text.secondary" gutterBottom>
-                  Veuillez associer les colonnes de votre fichier aux champs correspondants.
-                </Typography>
-                
-                {availableColumns.map((column) => (
-                  <FormControl
-                    key={column}
-                    fullWidth
-                    margin="normal"
-                    size="small"
-                  >
-                    <InputLabel>{column}</InputLabel>
-                    <Select
-                      value={columnMapping[column] || ''}
-                      onChange={(e) => {
-                        setColumnMapping(prev => ({
-                          ...prev,
-                          [column]: e.target.value
-                        }));
-                      }}
-                      label={column}
-                    >
-                      <MenuItem value="">
-                        <em>Ne pas importer</em>
-                      </MenuItem>
-                      {getFieldOptions().map((option) => (
-                        <MenuItem 
-                          key={option.value} 
-                          value={option.value}
-                          disabled={Object.values(columnMapping).includes(option.value)}
-                        >
-                          {option.label}
-                        </MenuItem>
-                      ))}
-                    </Select>
-                  </FormControl>
-                ))}
-              </Box>
-            </DialogContent>
-            <DialogActions>
-              <Button 
-                onClick={() => setShowMappingDialog(false)}
-                color="inherit"
-              >
-                Annuler
-              </Button>
-              <Button 
-                onClick={handleImportData}
-                variant="contained"
-                disabled={isLoading}
-                startIcon={isLoading && <CircularProgress size={20} />}
-              >
-                {isLoading ? 'Importation...' : 'Importer les Données'}
-              </Button>
-            </DialogActions>
-          </Dialog>
+          </div>
         </TabPanel>
 
         <TabPanel value={tabValue} index={1}>
-          <ManualRegistration onRegistrationComplete={fetchBeneficiaires} />
+          <ManualRegistration onRegistrationComplete={() => setTabValue(0)} />
         </TabPanel>
-      </div>
+
+        <ColumnMappingDialog
+          open={showMappingDialog}
+          onClose={() => !isLoading && setShowMappingDialog(false)}
+          availableColumns={availableColumns}
+          columnMapping={columnMapping}
+          onMappingChange={handleMappingChange}
+          onConfirm={handleMappingConfirm}
+        />
+      </Paper>
     </PageTransition>
   );
 }

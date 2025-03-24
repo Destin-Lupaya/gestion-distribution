@@ -14,6 +14,10 @@ export const parseExcel = async (file: File): Promise<any[]> => {
     reader.onload = (event) => {
       try {
         const data = event.target?.result;
+        if (!data) {
+          throw new Error('Données du fichier vides');
+        }
+
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheet = workbook.SheetNames[0];
         const worksheet = workbook.Sheets[firstSheet];
@@ -21,10 +25,33 @@ export const parseExcel = async (file: File): Promise<any[]> => {
         // Convertir en JSON avec options pour les dates
         const jsonData = XLSX.utils.sheet_to_json(worksheet, {
           raw: false,
-          dateNF: 'yyyy-mm-dd'
+          dateNF: 'yyyy-mm-dd',
+          defval: '', // Valeur par défaut pour les cellules vides
+          header: 1 // Utiliser la première ligne comme en-têtes
+        }) as unknown[][];
+
+        // Vérifier que nous avons des données
+        if (!Array.isArray(jsonData) || jsonData.length < 2) {
+          throw new Error('Le fichier ne contient pas assez de données');
+        }
+
+        // Extraire les en-têtes (première ligne)
+        const headers = jsonData[0] as string[];
+        if (!Array.isArray(headers) || headers.length === 0) {
+          throw new Error('En-têtes de colonnes invalides');
+        }
+
+        // Convertir les données en tableau d'objets
+        const result = jsonData.slice(1).map((row: unknown[]) => {
+          const obj: { [key: string]: any } = {};
+          headers.forEach((header: string, index: number) => {
+            obj[header] = row[index] || '';
+          });
+          return obj;
         });
         
-        resolve(jsonData);
+        console.log('Parsed Excel data:', result); // Debug log
+        resolve(result);
       } catch (error) {
         reject(new Error('Erreur lors du parsing du fichier Excel: ' + error));
       }

@@ -22,8 +22,9 @@ import CloseIcon from '@mui/icons-material/Close';
 import CameraAltIcon from '@mui/icons-material/CameraAlt';
 import VideocamIcon from '@mui/icons-material/Videocam';
 import { Html5Qrcode } from 'html5-qrcode';
-import { typedSupabase } from '../lib/supabase';
 import toast from 'react-hot-toast';
+import * as databaseService from '../services/databaseService';
+import { Site, Household, Recipient } from '../types';
 
 interface ManualRegistrationProps {
   onRegistrationComplete?: () => void;
@@ -33,16 +34,15 @@ type ScannerType = 'mobile' | 'webcam';
 
 function ManualRegistration({ onRegistrationComplete }: ManualRegistrationProps) {
   const [formData, setFormData] = useState({
-    siteDistribution: '',
-    adresse: '',
-    householdId: '',
-    nomMenage: '',
+    siteName: '',
+    siteAddress: '',
+    householdName: '',
     tokenNumber: '',
     recipientFirstName: '',
     recipientMiddleName: '',
     recipientLastName: '',
-    nombreBeneficiaires: '',
-    nomSuppleant: ''
+    beneficiaryCount: '',
+    alternateRecipient: ''
   });
 
   const [scannerOpen, setScannerOpen] = useState(false);
@@ -51,6 +51,7 @@ function ManualRegistration({ onRegistrationComplete }: ManualRegistrationProps)
   const [cameras, setCameras] = useState<Array<{ id: string; label: string }>>([]);
   const [selectedCamera, setSelectedCamera] = useState<string>('');
   const [isScanning, setIsScanning] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   
   const html5QrCode = useRef<Html5Qrcode | null>(null);
   const scannerContainerRef = useRef<HTMLDivElement>(null);
@@ -75,44 +76,73 @@ function ManualRegistration({ onRegistrationComplete }: ManualRegistrationProps)
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setIsSubmitting(true);
 
     try {
-      const { data, error: dbError } = await typedSupabase.rpc('import_household_data', {
-        p_site_nom: formData.siteDistribution,
-        p_site_adresse: formData.adresse,
-        p_household_id: formData.householdId,
-        p_nom_menage: formData.nomMenage,
-        p_token_number: formData.tokenNumber,
-        p_nombre_beneficiaires: parseInt(formData.nombreBeneficiaires),
-        p_recipient_first_name: formData.recipientFirstName,
-        p_recipient_middle_name: formData.recipientMiddleName || null,
-        p_recipient_last_name: formData.recipientLastName,
-        p_nom_suppleant: formData.nomSuppleant || null
+      // 1. Créer ou récupérer le site
+      const site = await databaseService.createSite({
+        nom: formData.siteName,
+        adresse: formData.siteAddress,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
       });
 
-      if (dbError) throw dbError;
+      // 2. Créer le ménage
+      const household = await databaseService.createHousehold({
+        site_id: site.id,
+        nom_menage: formData.householdName,
+        token_number: formData.tokenNumber,
+        nombre_beneficiaires: parseInt(formData.beneficiaryCount),
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+      // 3. Créer le bénéficiaire principal
+      await databaseService.createRecipient({
+        household_id: household.id,
+        first_name: formData.recipientFirstName,
+        middle_name: formData.recipientMiddleName || undefined,
+        last_name: formData.recipientLastName,
+        is_primary: true,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      });
+
+      // 4. Créer le bénéficiaire suppléant si spécifié
+      if (formData.alternateRecipient) {
+        const [firstName, ...lastNameParts] = formData.alternateRecipient.split(' ');
+        await databaseService.createRecipient({
+          household_id: household.id,
+          first_name: firstName,
+          last_name: lastNameParts.join(' '),
+          is_primary: false,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        });
+      }
 
       toast.success('Bénéficiaire enregistré avec succès');
       setFormData({
-        siteDistribution: '',
-        adresse: '',
-        householdId: '',
-        nomMenage: '',
+        siteName: '',
+        siteAddress: '',
+        householdName: '',
         tokenNumber: '',
         recipientFirstName: '',
         recipientMiddleName: '',
         recipientLastName: '',
-        nombreBeneficiaires: '',
-        nomSuppleant: ''
+        beneficiaryCount: '',
+        alternateRecipient: ''
       });
 
       if (onRegistrationComplete) {
         onRegistrationComplete();
       }
-    } catch (err) {
-      console.error('Error registering beneficiary:', err);
-      setError('Erreur lors de l\'enregistrement du bénéficiaire');
+    } catch (error) {
+      console.error('Error registering beneficiary:', error);
+      setError(error instanceof Error ? error.message : 'Une erreur est survenue lors de l\'enregistrement');
       toast.error('Erreur lors de l\'enregistrement');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -206,255 +236,241 @@ function ManualRegistration({ onRegistrationComplete }: ManualRegistrationProps)
   };
 
   return (
-    <motion.div
-      initial={{ opacity: 0, y: 20 }}
-      animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.5 }}
-    >
-      <Paper className="p-6">
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-          <Typography variant="h6">Enregistrement Manuel</Typography>
+    <Paper component={motion.div} elevation={3} sx={{ p: 3, maxWidth: 800, mx: 'auto' }}>
+      <Typography variant="h5" gutterBottom>
+        Enregistrement Manuel
+      </Typography>
+
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
+
+      <form onSubmit={handleSubmit}>
+        <Grid container spacing={3}>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              required
+              fullWidth
+              label="Nom du Site"
+              name="siteName"
+              value={formData.siteName}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              required
+              fullWidth
+              label="Adresse du Site"
+              name="siteAddress"
+              value={formData.siteAddress}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              required
+              fullWidth
+              label="Nom du Ménage"
+              name="householdName"
+              value={formData.householdName}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              required
+              fullWidth
+              label="Numéro Token"
+              name="tokenNumber"
+              value={formData.tokenNumber}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              required
+              fullWidth
+              label="Prénom du Bénéficiaire"
+              name="recipientFirstName"
+              value={formData.recipientFirstName}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              fullWidth
+              label="Deuxième Prénom"
+              name="recipientMiddleName"
+              value={formData.recipientMiddleName}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              required
+              fullWidth
+              label="Nom du Bénéficiaire"
+              name="recipientLastName"
+              value={formData.recipientLastName}
+              onChange={handleInputChange}
+            />
+          </Grid>
+          <Grid item xs={12} sm={6}>
+            <TextField
+              required
+              fullWidth
+              type="number"
+              label="Nombre de Bénéficiaires"
+              name="beneficiaryCount"
+              value={formData.beneficiaryCount}
+              onChange={handleInputChange}
+              inputProps={{ min: 1 }}
+            />
+          </Grid>
+          <Grid item xs={12}>
+            <TextField
+              fullWidth
+              label="Nom du Suppléant"
+              name="alternateRecipient"
+              value={formData.alternateRecipient}
+              onChange={handleInputChange}
+              helperText="Optionnel - Format: Prénom Nom"
+            />
+          </Grid>
+        </Grid>
+
+        <Box sx={{ mt: 3, display: 'flex', gap: 2 }}>
           <Button
-            startIcon={<QrCodeScannerIcon />}
-            onClick={startScanner}
-            variant="outlined"
+            variant="contained"
+            type="submit"
+            disabled={isSubmitting}
+            startIcon={isSubmitting ? <CircularProgress size={20} /> : undefined}
           >
-            Scanner QR/Code-barres
+            {isSubmitting ? 'Enregistrement...' : 'Enregistrer'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<QrCodeScannerIcon />}
+            onClick={() => setScannerOpen(true)}
+            disabled={isSubmitting}
+          >
+            Scanner QR Code
           </Button>
         </Box>
+      </form>
 
-        {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
-            {error}
-          </Alert>
-        )}
-
-        <form onSubmit={handleSubmit}>
-          <Grid container spacing={3}>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Site de distribution"
-                name="siteDistribution"
-                value={formData.siteDistribution}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Adresse"
-                name="adresse"
-                value={formData.adresse}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Household ID"
-                name="householdId"
-                value={formData.householdId}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Nom du Ménage"
-                name="nomMenage"
-                value={formData.nomMenage}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Token Number"
-                name="tokenNumber"
-                value={formData.tokenNumber}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={6}>
-              <TextField
-                fullWidth
-                label="Nombre de Bénéficiaires"
-                name="nombreBeneficiaires"
-                type="number"
-                value={formData.nombreBeneficiaires}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                label="Prénom du Bénéficiaire"
-                name="recipientFirstName"
-                value={formData.recipientFirstName}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                label="Deuxième Prénom"
-                name="recipientMiddleName"
-                value={formData.recipientMiddleName}
-                onChange={handleInputChange}
-              />
-            </Grid>
-            <Grid item xs={12} md={4}>
-              <TextField
-                fullWidth
-                label="Nom de Famille"
-                name="recipientLastName"
-                value={formData.recipientLastName}
-                onChange={handleInputChange}
-                required
-              />
-            </Grid>
-            <Grid item xs={12}>
-              <TextField
-                fullWidth
-                label="Nom du Suppléant"
-                name="nomSuppleant"
-                value={formData.nomSuppleant}
-                onChange={handleInputChange}
-              />
-            </Grid>
-          </Grid>
-
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-end' }}>
-            <Button
-              type="submit"
-              variant="contained"
-              size="large"
+      {/* Scanner Dialog */}
+      <Dialog
+        open={scannerOpen}
+        onClose={() => setScannerOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Scanner QR Code
+          <IconButton
+            aria-label="close"
+            onClick={() => setScannerOpen(false)}
+            sx={{ position: 'absolute', right: 8, top: 8 }}
+          >
+            <CloseIcon />
+          </IconButton>
+        </DialogTitle>
+        <DialogContent>
+          <Box sx={{ mb: 2 }}>
+            <ToggleButtonGroup
+              value={scannerType}
+              exclusive
+              onChange={(e, value) => value && setScannerType(value)}
+              aria-label="scanner type"
             >
-              Enregistrer
-            </Button>
+              <ToggleButton value="mobile" aria-label="mobile">
+                <CameraAltIcon sx={{ mr: 1 }} /> Mobile
+              </ToggleButton>
+              <ToggleButton value="webcam" aria-label="webcam">
+                <VideocamIcon sx={{ mr: 1 }} /> Webcam
+              </ToggleButton>
+            </ToggleButtonGroup>
           </Box>
-        </form>
-
-        <Dialog
-          open={scannerOpen}
-          onClose={stopScanner}
-          maxWidth="sm"
-          fullWidth
-        >
-          <DialogTitle>
-            Scanner le QR Code ou Code-barres
-            <IconButton
-              onClick={stopScanner}
-              sx={{ position: 'absolute', right: 8, top: 8 }}
-            >
-              <CloseIcon />
-            </IconButton>
-          </DialogTitle>
-          <DialogContent>
-            <Box sx={{ mb: 2, display: 'flex', justifyContent: 'center' }}>
-              <ToggleButtonGroup
-                value={scannerType}
-                exclusive
-                onChange={handleScannerTypeChange}
-                aria-label="scanner type"
+          {cameras.length > 0 && (
+            <Box sx={{ mb: 2 }}>
+              <TextField
+                select
+                fullWidth
+                label="Sélectionner la caméra"
+                value={selectedCamera}
+                onChange={(e) => setSelectedCamera(e.target.value)}
+                variant="outlined"
+                SelectProps={{
+                  native: true,
+                }}
               >
-                <ToggleButton value="mobile" aria-label="mobile camera">
-                  <CameraAltIcon sx={{ mr: 1 }} />
-                  Caméra Mobile
-                </ToggleButton>
-                <ToggleButton value="webcam" aria-label="webcam">
-                  <VideocamIcon sx={{ mr: 1 }} />
-                  Webcam
-                </ToggleButton>
-              </ToggleButtonGroup>
+                {cameras.map((camera) => (
+                  <option key={camera.id} value={camera.id}>
+                    {camera.label}
+                  </option>
+                ))}
+              </TextField>
             </Box>
-
-            {cameras.length > 0 && (
-              <Box sx={{ mb: 2 }}>
-                <TextField
-                  select
-                  fullWidth
-                  label="Sélectionner la caméra"
-                  value={selectedCamera}
-                  onChange={(e) => setSelectedCamera(e.target.value)}
-                  variant="outlined"
-                  SelectProps={{
-                    native: true,
+          )}
+          <Box 
+            ref={scannerContainerRef}
+            sx={{ 
+              position: 'relative', 
+              width: '100%', 
+              height: 300,
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              backgroundColor: '#f5f5f5',
+              borderRadius: 1
+            }}
+          >
+            {!isScanning ? (
+              <Button
+                variant="contained"
+                onClick={startScanningProcess}
+                disabled={!selectedCamera}
+                startIcon={<QrCodeScannerIcon />}
+              >
+                Démarrer le scan
+              </Button>
+            ) : (
+              <>
+                <div 
+                  id="qr-reader" 
+                  ref={qrReaderRef}
+                  style={{ 
+                    width: '100%', 
+                    height: '100%',
+                    position: 'relative'
+                  }}
+                />
+                <Box
+                  sx={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                    zIndex: 1,
                   }}
                 >
-                  {cameras.map((camera) => (
-                    <option key={camera.id} value={camera.id}>
-                      {camera.label}
-                    </option>
-                  ))}
-                </TextField>
-              </Box>
+                  <CircularProgress />
+                </Box>
+              </>
             )}
-
-            <Box 
-              ref={scannerContainerRef}
-              sx={{ 
-                position: 'relative', 
-                width: '100%', 
-                height: 300,
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                backgroundColor: '#f5f5f5',
-                borderRadius: 1
-              }}
-            >
-              {!isScanning ? (
-                <Button
-                  variant="contained"
-                  onClick={startScanningProcess}
-                  disabled={!selectedCamera}
-                  startIcon={<QrCodeScannerIcon />}
-                >
-                  Démarrer le scan
-                </Button>
-              ) : (
-                <>
-                  <div 
-                    id="qr-reader" 
-                    ref={qrReaderRef}
-                    style={{ 
-                      width: '100%', 
-                      height: '100%',
-                      position: 'relative'
-                    }}
-                  />
-                  <Box
-                    sx={{
-                      position: 'absolute',
-                      top: '50%',
-                      left: '50%',
-                      transform: 'translate(-50%, -50%)',
-                      zIndex: 1,
-                    }}
-                  >
-                    <CircularProgress />
-                  </Box>
-                </>
-              )}
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <Button onClick={stopScanner} color="primary">
-              Fermer
-            </Button>
-          </DialogActions>
-        </Dialog>
-      </Paper>
-    </motion.div>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setScannerOpen(false)} color="primary">
+            Fermer
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </Paper>
   );
 }
 
