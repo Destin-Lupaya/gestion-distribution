@@ -23,6 +23,7 @@ const AppContent = () => {
             <Route path="/" element={<ImportList />} />
             <Route path="/signatures" element={<SignatureCollection />} />
             <Route path="/report" element={<DistributionReport />} />
+            <Route path="/rapport" element={<DistributionReport />} />
             <Route path="/qr-test" element={<QRTester />} />
             <Route path="/test-parser" element={<TestParser />} />
             <Route path="/data" element={<DataGridView />} />

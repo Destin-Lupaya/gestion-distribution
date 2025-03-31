@@ -53,12 +53,18 @@ const ImportList: React.FC = () => {
         throw new Error('Erreur lors de la suggestion du mapping des colonnes');
       }
 
-      const { mapping, validation } = await mappingResponse.json();
+      const { mapping, isValid, missingColumns } = await mappingResponse.json() as {
+        mapping: Record<string, string>;
+        isValid: boolean;
+        missingColumns: string[];
+      };
 
-      if (!validation.isValid) {
-        setImportErrors(validation.errors);
+      if (!isValid) {
+        setImportErrors([`Colonnes manquantes : ${missingColumns.join(', ')}`]);
         return;
       }
+
+      setColumnMapping(mapping);
 
       // Transform data using the mapping
       const rows = jsonData.slice(1).map((row: any) => {
@@ -100,16 +106,17 @@ const ImportList: React.FC = () => {
         throw new Error('Erreur lors de la validation des données');
       }
 
-      const { isValid, errors } = await dataValidation.json();
+      const { isValid: dataIsValid, errors } = await dataValidation.json() as {
+        isValid: boolean;
+        errors: string[];
+      };
 
-      if (!isValid) {
+      if (!dataIsValid) {
         setImportErrors(errors);
         return;
       }
 
       setTempFileData(rows);
-      setColumnMapping(mapping);
-      setImportErrors([]);
       setShowMappingDialog(true);
     } catch (error) {
       console.error('Error processing file:', error);

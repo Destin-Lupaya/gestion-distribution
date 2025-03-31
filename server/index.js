@@ -60,8 +60,10 @@ const initializeDatabase = async () => {
         token_number VARCHAR(50) NOT NULL,
         beneficiary_count INT NOT NULL,
         first_name VARCHAR(255) NOT NULL,
-        middle_name VARCHAR(255) NOT NULL,
+        middle_name VARCHAR(255),
         last_name VARCHAR(255) NOT NULL,
+        site_address TEXT,
+        alternate_recipient TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
         UNIQUE KEY unique_token (token_number),
@@ -82,25 +84,11 @@ const initializeDatabase = async () => {
       const columnNames = columns.map(col => col.COLUMN_NAME.toLowerCase());
       
       // Ajouter les nouvelles colonnes si elles n'existent pas
-      if (!columnNames.includes('first_name')) {
-        await connection.query('ALTER TABLE households ADD COLUMN first_name VARCHAR(255) NOT NULL AFTER beneficiary_count');
+      if (!columnNames.includes('site_address')) {
+        await connection.query('ALTER TABLE households ADD COLUMN site_address TEXT AFTER last_name');
       }
-      if (!columnNames.includes('middle_name')) {
-        await connection.query('ALTER TABLE households ADD COLUMN middle_name VARCHAR(255) NOT NULL AFTER first_name');
-      }
-      if (!columnNames.includes('last_name')) {
-        await connection.query('ALTER TABLE households ADD COLUMN last_name VARCHAR(255) NOT NULL AFTER middle_name');
-      }
-      
-      // Renommer les colonnes existantes
-      if (columnNames.includes('site_id')) {
-        await connection.query('ALTER TABLE households CHANGE COLUMN site_id site_name VARCHAR(255) NOT NULL');
-      }
-      if (columnNames.includes('household_name')) {
-        await connection.query('ALTER TABLE households CHANGE COLUMN household_name household_id VARCHAR(255) NOT NULL');
-      }
-      if (columnNames.includes('number_of_beneficiaries')) {
-        await connection.query('ALTER TABLE households CHANGE COLUMN number_of_beneficiaries beneficiary_count INT NOT NULL');
+      if (!columnNames.includes('alternate_recipient')) {
+        await connection.query('ALTER TABLE households ADD COLUMN alternate_recipient TEXT AFTER site_address');
       }
       
       console.log('Households table structure updated');
@@ -127,15 +115,39 @@ const initializeDatabase = async () => {
     await connection.query(`
       CREATE TABLE IF NOT EXISTS distributions (
         id INT PRIMARY KEY AUTO_INCREMENT,
-        site_id INT,
-        distribution_date DATE NOT NULL,
-        status ENUM('pending', 'in_progress', 'completed') DEFAULT 'pending',
+        household_id INT NOT NULL,
+        distribution_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        status ENUM('pending', 'distributed', 'cancelled') DEFAULT 'pending',
+        signature_data MEDIUMTEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE SET NULL
+        FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
+        INDEX idx_distribution_date (distribution_date),
+        UNIQUE INDEX idx_unique_distribution (household_id, distribution_date)
       )
     `);
     console.log('Distributions table checked/created');
+
+    // Mettre à jour la table si elle existe déjà
+    try {
+      // Vérifier si les nouvelles colonnes existent
+      const [columns] = await connection.query(`
+        SELECT COLUMN_NAME 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_NAME = 'distributions'
+      `);
+      
+      const columnNames = columns.map(col => col.COLUMN_NAME.toLowerCase());
+      
+      // Ajouter les nouvelles colonnes si elles n'existent pas
+      if (!columnNames.includes('signature_data')) {
+        await connection.query('ALTER TABLE distributions ADD COLUMN signature_data MEDIUMTEXT AFTER status');
+      }
+      
+      console.log('Distributions table structure updated');
+    } catch (error) {
+      console.error('Error updating distributions table:', error);
+    }
 
     connection.release();
     console.log('Database initialized successfully');
@@ -159,6 +171,13 @@ const checkDatabaseConnection = async (req, res, next) => {
     res.status(500).json({ error: 'Database connection error' });
   }
 };
+
+// Middleware de journalisation
+app.use((req, res, next) => {
+  console.log(`${new Date().toISOString()} ${req.method} ${req.url}`);
+  console.log('Request body:', req.body);
+  next();
+});
 
 // Route de test de santé
 app.get('/api/health', async (req, res) => {
@@ -428,6 +447,322 @@ app.post('/api/validate-data', (req, res) => {
   } catch (error) {
     console.error('Erreur lors de la validation des données:', error);
     res.status(500).json({ error: 'Erreur lors de la validation des données' });
+  }
+});
+
+// Route pour obtenir les statistiques de distribution
+app.get('/api/distribution-stats', async (req, res) => {
+  console.log('GET /api/distribution-stats called');
+  try {
+    const connection = await pool.getConnection();
+    console.log('Database connection obtained');
+    
+    const query = `
+      SELECT 
+        h.site_name as site_distribution,
+        COUNT(CASE WHEN d.status = 'distributed' THEN 1 END) as distributed_count,
+        COUNT(DISTINCT h.id) as total_count
+      FROM households h
+      LEFT JOIN distributions d ON h.id = d.household_id
+      GROUP BY h.site_name
+      ORDER BY h.site_name
+    `;
+    
+    console.log('Executing query:', query);
+    const [stats] = await connection.query(query);
+    console.log('Query results:', stats);
+
+    connection.release();
+    res.json(stats);
+  } catch (error) {
+    console.error('Error fetching distribution stats:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des statistiques' });
+  }
+});
+
+// Route pour traiter le scan QR
+app.post('/api/process-qr-scan', async (req, res) => {
+  let connection;
+  try {
+    console.log('Received QR scan data:', req.body);
+    const qrData = req.body.qrData;
+
+    // Essayer de parser les données QR si c'est une chaîne JSON
+    let parsedData;
+    try {
+      parsedData = typeof qrData === 'string' ? JSON.parse(qrData) : qrData;
+    } catch (e) {
+      console.log('QR data is not JSON, using as is:', qrData);
+      parsedData = qrData;
+    }
+
+    connection = await pool.getConnection();
+
+    // Rechercher le bénéficiaire avec plusieurs critères possibles
+    const [rows] = await connection.query(
+      `SELECT * FROM households 
+       WHERE id = ? 
+       OR (site_name = ? AND household_id = ?)
+       OR token_number = ?`,
+      [
+        parsedData.id || null,
+        parsedData.site_name || '',
+        parsedData.household_id || '',
+        parsedData.token_number || ''
+      ]
+    );
+
+    console.log('Database query result:', rows);
+
+    if (rows && rows.length > 0) {
+      res.json({
+        success: true,
+        data: rows[0]
+      });
+    } else {
+      console.log('No beneficiary found for data:', parsedData);
+      res.status(404).json({
+        error: 'Bénéficiaire non trouvé',
+        details: 'Aucun bénéficiaire trouvé avec les données fournies'
+      });
+    }
+  } catch (error) {
+    console.error('Error processing QR scan:', error);
+    res.status(500).json({
+      error: 'Erreur lors du traitement du scan QR',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Route pour vérifier le statut QR
+app.post('/api/check-qr-status', async (req, res) => {
+  try {
+    const { householdId } = req.body;
+    const connection = await pool.getConnection();
+
+    const [distribution] = await connection.query(
+      `SELECT d.*, h.site_name 
+       FROM distributions d
+       JOIN households h ON d.household_id = h.id
+       WHERE d.household_id = ? 
+       ORDER BY d.distribution_date DESC 
+       LIMIT 1`,
+      [householdId]
+    );
+
+    connection.release();
+    res.json(distribution);
+  } catch (error) {
+    console.error('Error checking QR status:', error);
+    res.status(500).json({ error: 'Erreur lors de la vérification du statut' });
+  }
+});
+
+// Route pour enregistrer la signature
+app.post('/api/record-signature', async (req, res) => {
+  try {
+    const { householdId, signatureData } = req.body;
+    const connection = await pool.getConnection();
+
+    await connection.query(
+      `INSERT INTO distributions (household_id, signature_data, distribution_date, status) 
+       VALUES (?, ?, NOW(), 'distributed')`,
+      [householdId, signatureData]
+    );
+
+    connection.release();
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error recording signature:', error);
+    res.status(500).json({ error: 'Erreur lors de l\'enregistrement de la signature' });
+  }
+});
+
+// Route pour enregistrer un bénéficiaire manuellement
+app.post('/api/register-beneficiary', async (req, res) => {
+  let connection;
+  try {
+    const {
+      site_name,
+      household_id,
+      token_number,
+      beneficiary_count,
+      first_name,
+      middle_name,
+      last_name,
+      site_address,
+      alternate_recipient
+    } = req.body;
+
+    // Validation des champs requis
+    if (!site_name || !household_id || !token_number || !beneficiary_count || !first_name || !last_name) {
+      return res.status(400).json({ error: 'Tous les champs obligatoires doivent être remplis' });
+    }
+
+    connection = await pool.getConnection();
+
+    // Vérifier si le ménage existe déjà
+    const [existing] = await connection.query(
+      'SELECT id FROM households WHERE household_id = ? AND site_name = ?',
+      [household_id, site_name]
+    );
+
+    if (existing && existing.length > 0) {
+      return res.status(400).json({ error: 'Ce ménage existe déjà' });
+    }
+
+    // Insérer le nouveau ménage
+    const [result] = await connection.query(
+      `INSERT INTO households (
+        site_name,
+        household_id,
+        token_number,
+        beneficiary_count,
+        first_name,
+        middle_name,
+        last_name,
+        site_address,
+        alternate_recipient
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        site_name,
+        household_id,
+        token_number,
+        beneficiary_count,
+        first_name,
+        middle_name || '',
+        last_name,
+        site_address || null,
+        alternate_recipient || null
+      ]
+    );
+
+    // Générer le QR code avec toutes les informations
+    const qrData = {
+      id: result.insertId,
+      site_name,
+      household_id,
+      household_name: `${first_name} ${last_name}`,
+      token_number,
+      beneficiary_count,
+      first_name,
+      middle_name,
+      last_name,
+      site_address,
+      alternate_recipient
+    };
+
+    res.json({
+      success: true,
+      message: 'Bénéficiaire enregistré avec succès',
+      data: {
+        ...qrData,
+        qrData: JSON.stringify(qrData)
+      }
+    });
+  } catch (error) {
+    console.error('Error registering beneficiary:', error);
+    res.status(500).json({
+      error: 'Erreur lors de l\'enregistrement du bénéficiaire',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Route pour enregistrer une distribution manuellement
+app.post('/api/register-distribution', async (req, res) => {
+  let connection;
+  try {
+    const {
+      site_name,
+      household_id,
+      token_number,
+      beneficiary_count,
+      first_name,
+      middle_name,
+      last_name,
+      site_address,
+      alternate_recipient,
+      signature
+    } = req.body;
+
+    // Validation des champs requis
+    if (!site_name || !household_id || !token_number || !beneficiary_count || !first_name || !last_name || !signature) {
+      return res.status(400).json({ error: 'Tous les champs obligatoires doivent être remplis' });
+    }
+
+    connection = await pool.getConnection();
+
+    // Vérifier si le ménage existe déjà
+    const [existing] = await connection.query(
+      'SELECT id FROM households WHERE household_id = ? AND site_name = ?',
+      [household_id, site_name]
+    );
+
+    let householdId;
+
+    // Si le ménage n'existe pas, on le crée
+    if (!existing || existing.length === 0) {
+      const [result] = await connection.query(
+        `INSERT INTO households (
+          site_name,
+          household_id,
+          token_number,
+          beneficiary_count,
+          first_name,
+          middle_name,
+          last_name,
+          site_address,
+          alternate_recipient
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          site_name,
+          household_id,
+          token_number,
+          beneficiary_count,
+          first_name,
+          middle_name || '',
+          last_name,
+          site_address || null,
+          alternate_recipient || null
+        ]
+      );
+      householdId = result.insertId;
+    } else {
+      householdId = existing[0].id;
+    }
+
+    // Enregistrer la distribution
+    await connection.query(
+      `INSERT INTO distributions (
+        household_id,
+        distribution_date,
+        status,
+        signature_data
+      ) VALUES (?, NOW(), 'distributed', ?)`,
+      [householdId, signature]
+    );
+
+    res.json({
+      success: true,
+      message: 'Distribution enregistrée avec succès',
+      data: {
+        household_id: householdId
+      }
+    });
+  } catch (error) {
+    console.error('Error registering distribution:', error);
+    res.status(500).json({
+      error: 'Erreur lors de l\'enregistrement de la distribution',
+      details: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  } finally {
+    if (connection) connection.release();
   }
 });
 

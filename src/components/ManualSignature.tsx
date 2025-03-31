@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   Paper,
   Typography,
@@ -7,9 +7,13 @@ import {
   Box,
   Grid,
   Alert,
-  CircularProgress
+  CircularProgress,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions
 } from '@mui/material';
-import { QRCodeSVG } from 'qrcode.react';
+import SignaturePad from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 
 interface BeneficiaryData {
@@ -24,7 +28,7 @@ interface BeneficiaryData {
   alternate_recipient?: string;
 }
 
-export default function ManualRegistration() {
+export default function ManualSignature() {
   const [formData, setFormData] = useState<BeneficiaryData>({
     site_name: '',
     household_id: '',
@@ -33,11 +37,14 @@ export default function ManualRegistration() {
     first_name: '',
     middle_name: '',
     last_name: '',
+    site_address: '',
+    alternate_recipient: ''
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [qrCode, setQrCode] = useState<string | null>(null);
-  const [success, setSuccess] = useState(false);
+  const [showSignaturePad, setShowSignaturePad] = useState(false);
+  const signaturePadRef = useRef<SignaturePad>(null);
+  const [signature, setSignature] = useState<string | null>(null);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -47,20 +54,40 @@ export default function ManualRegistration() {
     }));
   };
 
+  const handleSignatureComplete = () => {
+    if (signaturePadRef.current) {
+      const signatureData = signaturePadRef.current.toDataURL();
+      setSignature(signatureData);
+      setShowSignaturePad(false);
+    }
+  };
+
+  const handleClearSignature = () => {
+    if (signaturePadRef.current) {
+      signaturePadRef.current.clear();
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!signature) {
+      toast.error('Veuillez ajouter une signature');
+      return;
+    }
+
     setLoading(true);
     setError(null);
-    setQrCode(null);
-    setSuccess(false);
 
     try {
-      const response = await fetch('http://localhost:3001/api/register-beneficiary', {
+      const response = await fetch('http://localhost:3001/api/register-distribution', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify({
+          ...formData,
+          signature
+        }),
       });
 
       const result = await response.json();
@@ -69,9 +96,20 @@ export default function ManualRegistration() {
         throw new Error(result.error || 'Erreur lors de l\'enregistrement');
       }
 
-      setQrCode(result.data.qrData);
-      setSuccess(true);
-      toast.success('Bénéficiaire enregistré avec succès');
+      toast.success('Distribution enregistrée avec succès');
+      // Reset form
+      setFormData({
+        site_name: '',
+        household_id: '',
+        token_number: '',
+        beneficiary_count: 0,
+        first_name: '',
+        middle_name: '',
+        last_name: '',
+        site_address: '',
+        alternate_recipient: ''
+      });
+      setSignature(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
       toast.error(err instanceof Error ? err.message : 'Une erreur est survenue');
@@ -83,18 +121,12 @@ export default function ManualRegistration() {
   return (
     <Paper elevation={3} sx={{ p: 3, maxWidth: 800, mx: 'auto', my: 4 }}>
       <Typography variant="h5" gutterBottom>
-        Enregistrement Manuel de Bénéficiaire
+        Émargement Manuel
       </Typography>
 
       {error && (
         <Alert severity="error" sx={{ mb: 2 }}>
           {error}
-        </Alert>
-      )}
-
-      {success && (
-        <Alert severity="success" sx={{ mb: 2 }}>
-          Bénéficiaire enregistré avec succès
         </Alert>
       )}
 
@@ -193,27 +225,51 @@ export default function ManualRegistration() {
 
         <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
           <Button
+            variant="outlined"
+            onClick={() => setShowSignaturePad(true)}
+            disabled={loading}
+          >
+            {signature ? 'Modifier la signature' : 'Ajouter une signature'}
+          </Button>
+          <Button
             type="submit"
             variant="contained"
             color="primary"
-            disabled={loading}
+            disabled={loading || !signature}
           >
             {loading ? <CircularProgress size={24} /> : 'Enregistrer'}
           </Button>
         </Box>
+
+        {signature && (
+          <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+            <img src={signature} alt="Signature" style={{ maxWidth: 300, border: '1px solid #ccc' }} />
+          </Box>
+        )}
       </form>
 
-      {qrCode && (
-        <Box sx={{ mt: 4, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-          <Typography variant="h6" gutterBottom>
-            Code QR généré
-          </Typography>
-          <QRCodeSVG value={qrCode} size={200} />
-          <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-            Scannez ce code QR pour identifier le bénéficiaire
-          </Typography>
-        </Box>
-      )}
+      <Dialog open={showSignaturePad} onClose={() => setShowSignaturePad(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Signature</DialogTitle>
+        <DialogContent>
+          <Box sx={{ border: '1px solid #ccc', mt: 2 }}>
+            <SignaturePad
+              ref={signaturePadRef}
+              canvasProps={{
+                width: 500,
+                height: 200,
+                style: { width: '100%', height: '200px' }
+              }}
+            />
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClearSignature}>Effacer</Button>
+          <Button onClick={() => setShowSignaturePad(false)}>Annuler</Button>
+          <Button onClick={handleSignatureComplete} variant="contained" color="primary">
+            Valider
+          </Button>
+        </DialogActions>
+      </Dialog>
     </Paper>
   );
 }
