@@ -1,45 +1,71 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
-import { Container, ThemeProvider } from '@mui/material';
-import { AnimatePresence } from 'framer-motion';
-import Navbar from './components/Navbar';
+import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import ImportList from './components/ImportList';
+import ManualRegistration from './components/ManualRegistration';
 import SignatureCollection from './components/SignatureCollection';
-import DistributionReport from './components/DistributionReport';
+import UnifiedReport from './components/UnifiedReport';
 import QRTester from './components/QRTester';
 import TestParser from './components/TestParser';
 import DataGridView from './components/DataGrid';
+import Layout from './components/Layout';
+import { AnimatePresence } from 'framer-motion';
+import { Container, ThemeProvider } from '@mui/material';
 import { theme } from './theme';
 
-const AppContent = () => {
-  const location = useLocation();
-  
-  return (
-    <div className="App">
-      <Navbar />
-      <Container maxWidth="lg">
-        <AnimatePresence mode="wait">
-          <Routes location={location} key={location.pathname}>
-            <Route path="/" element={<ImportList />} />
-            <Route path="/signatures" element={<SignatureCollection />} />
-            <Route path="/report" element={<DistributionReport />} />
-            <Route path="/rapport" element={<DistributionReport />} />
-            <Route path="/qr-test" element={<QRTester />} />
-            <Route path="/test-parser" element={<TestParser />} />
-            <Route path="/data" element={<DataGridView />} />
-          </Routes>
-        </AnimatePresence>
-      </Container>
-    </div>
-  );
-};
+// Create router with v7 features enabled
+const router = createBrowserRouter(
+  [
+    {
+      path: '/',
+      element: <Layout />,
+      children: [
+        {
+          index: true,
+          element: <ImportList />
+        },
+        {
+          path: 'manual-registration',
+          element: <ManualRegistration />
+        },
+        {
+          path: 'signatures',
+          element: <SignatureCollection />
+        },
+        {
+          path: 'rapport',
+          element: <UnifiedReport />
+        },
+        {
+          path: 'qr-test',
+          element: <QRTester />
+        },
+        {
+          path: 'test-parser',
+          element: <TestParser />
+        },
+        {
+          path: 'data',
+          element: <DataGridView />
+        }
+      ]
+    }
+  ],
+  {
+    future: {
+      v7_startTransition: true,
+      v7_relativeSplatPath: true
+    }
+  }
+);
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
-      <BrowserRouter>
-        <AppContent />
-      </BrowserRouter>
+      <Container maxWidth="lg">
+        <AnimatePresence mode="wait">
+          <RouterProvider router={router} />
+        </AnimatePresence>
+      </Container>
     </ThemeProvider>
   );
 }

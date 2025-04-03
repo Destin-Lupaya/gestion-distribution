@@ -1,5 +1,4 @@
-import { faker } from '@faker-js/faker';
-faker.locale = 'fr';
+import { faker } from '@faker-js/faker/locale/fr';
 
 export interface Household {
   id?: number;

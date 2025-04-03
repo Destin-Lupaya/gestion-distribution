@@ -63,8 +63,8 @@ function Navbar() {
         borderBottom: '1px solid #e2e8f0',
       }}
     >
-      <Container maxWidth="xl">
-        <Toolbar sx={{ justifyContent: 'space-between', height: 70, px: '0 !important' }}>
+      <Container maxWidth="lg">
+        <Toolbar disableGutters sx={{ justifyContent: 'space-between', height: 70, px: '0 !important' }}>
           <Typography 
             variant="h5" 
             component="div"
@@ -78,9 +78,9 @@ function Navbar() {
           </Typography>
 
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <NavButton to="/" icon={<ListAltIcon />} label="Vérification Liste" />
-            <NavButton to="/signatures" icon={<DrawIcon />} label="Émargement" />
-            <NavButton to="/rapport" icon={<AssessmentIcon />} label="Rapport" />
+            <NavButton to="/" icon={<ListAltIcon />} label="Liste" />
+            <NavButton to="/signatures" icon={<DrawIcon />} label="Signatures" />
+            <NavButton to="/rapport" icon={<AssessmentIcon />} label="Rapport Global" />
             <NavButton to="/data" icon={<GridViewIcon />} label="Données" />
           </Box>
         </Toolbar>

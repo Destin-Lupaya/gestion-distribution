@@ -55,6 +55,8 @@ export default function SignatureCollection() {
       return null;
     }
   });
+  const [error, setError] = useState<string | null>(null);
+  const [step, setStep] = useState('scan');
 
   const playSuccessSound = () => {
     if (!audioContext) return;
@@ -92,23 +94,52 @@ export default function SignatureCollection() {
     // Get available cameras
     const getCameras = async () => {
       try {
+        // Check if mediaDevices is available
+        if (!navigator.mediaDevices) {
+          console.log('MediaDevices API not available');
+          setCameras([]);
+          setError('Caméra non disponible. Veuillez utiliser un appareil avec une caméra ou autoriser l\'accès à la caméra.');
+          return;
+        }
+        
+        // Request camera permission first to ensure mediaDevices is fully initialized
+        try {
+          await navigator.mediaDevices.getUserMedia({ video: true });
+        } catch (permissionError) {
+          console.log('Camera permission denied:', permissionError);
+          setError('Accès à la caméra refusé. Veuillez autoriser l\'accès à la caméra dans les paramètres de votre navigateur.');
+          return;
+        }
+        
         const devices = await navigator.mediaDevices.enumerateDevices();
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
-        setCameras(videoDevices);
-        if (videoDevices.length > 0) {
-          // Prefer back camera
-          const backCamera = videoDevices.find(device => 
-            device.label.toLowerCase().includes('back') || 
-            device.label.toLowerCase().includes('rear')
-          );
-          setSelectedCamera(backCamera?.deviceId || videoDevices[0].deviceId);
+        
+        if (videoDevices.length === 0) {
+          setError('Aucune caméra détectée sur cet appareil.');
+          setCameras([]);
+          return;
         }
+        
+        setCameras(videoDevices);
+        
+        // Prefer back camera
+        const backCamera = videoDevices.find(device => 
+          device.label.toLowerCase().includes('back') || 
+          device.label.toLowerCase().includes('rear')
+        );
+        setSelectedCamera(backCamera?.deviceId || videoDevices[0].deviceId);
       } catch (error) {
         console.error('Error getting cameras:', error);
+        setCameras([]);
+        setError('Erreur lors de l\'accès à la caméra. Veuillez réessayer ou utiliser un autre appareil.');
       }
     };
-    getCameras();
-  }, []);
+    
+    // Only try to access camera if we're in the scanning step
+    if (step === 'scan') {
+      getCameras();
+    }
+  }, [step]);
 
   const handleManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -617,6 +648,22 @@ export default function SignatureCollection() {
                     }}
                   >
                     {scanError}
+                  </Typography>
+                )}
+                {error && (
+                  <Typography
+                    color="error"
+                    sx={{
+                      position: 'absolute',
+                      bottom: 16,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      backgroundColor: 'rgba(255, 255, 255, 0.8)',
+                      padding: 1,
+                      borderRadius: 1
+                    }}
+                  >
+                    {error}
                   </Typography>
                 )}
               </>

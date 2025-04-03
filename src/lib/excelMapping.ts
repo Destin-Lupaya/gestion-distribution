@@ -106,7 +106,9 @@ export const expectedFields = [
   'beneficiary_count',
   'first_name',
   'middle_name',
-  'last_name'
+  'last_name',
+  'site_address',
+  'alternate_recipient'
 ] as const;
 
 export const columnDefinitions = {
@@ -149,6 +151,16 @@ export const columnDefinitions = {
     field: 'last_name',
     headerName: 'Nom',
     alternateNames: ['Nom', 'Nom de famille', 'Last name']
+  },
+  site_address: {
+    field: 'site_address',
+    headerName: 'Adresse du site',
+    alternateNames: ['Adresse', 'Adresse du site', 'Address']
+  },
+  alternate_recipient: {
+    field: 'alternate_recipient',
+    headerName: 'Bénéficiaire suppléant',
+    alternateNames: ['Suppléant', 'Bénéficiaire suppléant', 'Alternate']
   }
 } as const;
 
@@ -227,7 +239,9 @@ export function transformData(data: any[], columnMapping: Record<string, string>
       beneficiary_count: parseInt(row[columnMapping.beneficiary_count]) || 0,
       first_name: row[columnMapping.first_name] || '',
       middle_name: row[columnMapping.middle_name] || '',
-      last_name: row[columnMapping.last_name] || ''
+      last_name: row[columnMapping.last_name] || '',
+      site_address: columnMapping.site_address ? (row[columnMapping.site_address] || '') : '',
+      alternate_recipient: columnMapping.alternate_recipient ? (row[columnMapping.alternate_recipient] || '') : ''
     };
 
     return transformedRow;

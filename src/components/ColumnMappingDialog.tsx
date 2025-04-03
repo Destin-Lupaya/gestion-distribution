@@ -31,15 +31,22 @@ const requiredFields = [
   'last_name'
 ];
 
+const optionalFields = [
+  'site_address',
+  'alternate_recipient'
+];
+
 const fieldLabels: Record<string, string> = {
   site_name: 'Nom du site',
+  site_address: 'Adresse du site',
   household_id: 'ID Ménage',
   household_name: 'Nom du ménage',
   token_number: 'Numéro de jeton',
   beneficiary_count: 'Nombre de bénéficiaires',
   first_name: 'Prénom',
   middle_name: 'Post-nom',
-  last_name: 'Nom'
+  last_name: 'Nom',
+  alternate_recipient: 'Bénéficiaire suppléant'
 };
 
 const ColumnMappingDialog: React.FC<ColumnMappingDialogProps> = ({
@@ -62,6 +69,33 @@ const ColumnMappingDialog: React.FC<ColumnMappingDialogProps> = ({
       <DialogContent>
         <Grid container spacing={2} sx={{ mt: 1 }}>
           {requiredFields.map(field => (
+            <Grid item xs={12} sm={6} key={field}>
+              <FormControl fullWidth>
+                <InputLabel>{fieldLabels[field]}</InputLabel>
+                <Select
+                  value={columnMapping[field] || ''}
+                  onChange={(e) => handleChange(field, e.target.value as string)}
+                  label={fieldLabels[field]}
+                >
+                  <MenuItem value="">
+                    <em>Non mappé</em>
+                  </MenuItem>
+                  {Object.values(columnMapping).map(header => (
+                    <MenuItem key={header} value={header}>
+                      {header}
+                    </MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+          ))}
+          
+          {/* Optional Fields */}
+          <Grid item xs={12}>
+            <h4 style={{ marginTop: '16px', marginBottom: '8px' }}>Champs optionnels</h4>
+          </Grid>
+          
+          {optionalFields.map(field => (
             <Grid item xs={12} sm={6} key={field}>
               <FormControl fullWidth>
                 <InputLabel>{fieldLabels[field]}</InputLabel>

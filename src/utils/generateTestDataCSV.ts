@@ -1,8 +1,6 @@
-import { faker } from '@faker-js/faker';
+import { faker } from '@faker-js/faker/locale/fr';
 import { writeFileSync } from 'fs';
 import { join } from 'path';
-import { Parser } from 'json2csv';
-faker.locale = 'fr';
 
 interface Household {
   site_name: string;
@@ -19,19 +17,16 @@ function generateTestData(count = 100): Household[] {
   const data: Household[] = [];
 
   for (let i = 0; i < count; i++) {
-    const site_name = faker.helpers.arrayElement(sites);
-    const household_id = `HH${faker.number.int({ min: 1000, max: 9999 })}`;
-    const token_number = `TK${faker.number.int({ min: 10000, max: 99999 })}`;
-    
-    data.push({
-      site_name,
-      household_id,
-      token_number,
+    const household: Household = {
+      site_name: faker.helpers.arrayElement(sites),
+      household_id: faker.string.uuid(),
+      token_number: faker.string.numeric(6),
       beneficiary_count: faker.number.int({ min: 1, max: 10 }),
       first_name: faker.person.firstName(),
-      middle_name: faker.person.firstName(),
+      middle_name: faker.helpers.maybe(() => faker.person.firstName(), { probability: 0.3 }) || '',
       last_name: faker.person.lastName()
-    });
+    };
+    data.push(household);
   }
 
   return data;
@@ -39,22 +34,22 @@ function generateTestData(count = 100): Household[] {
 
 function generateCSV(count = 100): void {
   const data = generateTestData(count);
-  const fields = [
-    'site_name',
-    'household_id',
-    'token_number',
-    'beneficiary_count',
-    'first_name',
-    'middle_name',
-    'last_name'
-  ];
+  const headers = Object.keys(data[0]).join(',');
+  const rows = data.map(household => 
+    Object.values(household)
+      .map(value => typeof value === 'string' ? `"${value}"` : value)
+      .join(',')
+  );
   
-  const json2csvParser = new Parser({ fields });
-  const csv = json2csvParser.parse(data);
+  const csv = [headers, ...rows].join('\n');
+  const filePath = join(__dirname, '..', '..', 'data', 'test_data.csv');
   
-  const outputPath = join(__dirname, '..', '..', 'data', 'test_data.csv');
-  writeFileSync(outputPath, csv);
-  console.log(`CSV file generated at: ${outputPath}`);
+  try {
+    writeFileSync(filePath, csv, 'utf-8');
+    console.log(`CSV file generated at: ${filePath}`);
+  } catch (error) {
+    console.error(`Error writing CSV file: ${error}`);
+  }
 }
 
 // Générer le fichier CSV avec 100 enregistrements

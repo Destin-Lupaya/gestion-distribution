@@ -8,7 +8,7 @@ export async function getAllSites(): Promise<Site[]> {
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
-  return response.json();
+  return await response.json();
 }
 
 export async function createSite(site: Omit<Site, 'id'>): Promise<Site> {
@@ -17,15 +17,12 @@ export async function createSite(site: Omit<Site, 'id'>): Promise<Site> {
     headers: {
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({
-      nom: site.nom,
-      adresse: site.adresse
-    }),
+    body: JSON.stringify(site),
   });
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
-  return response.json();
+  return await response.json();
 }
 
 // Households

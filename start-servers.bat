@@ -1,32 +1,52 @@
 @echo off
+setlocal enabledelayedexpansion
+
 echo Verification et arret des serveurs existants...
 
-REM Verifier et arreter le serveur backend (port 3001)
-for /f "tokens=5" %%a in ('netstat -aon ^| find ":3001"') do (
-    echo Arret du processus backend %%a
-    taskkill /F /PID %%a >nul 2>&1
+:: Arreter le serveur frontend s'il est en cours d'execution
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :5173 ^| findstr LISTENING') do (
+    echo Arret du processus frontend %%a
+    taskkill /F /PID %%a 2>nul
 )
 
-REM Verifier et arreter le serveur frontend (port 5173)
-for /f "tokens=5" %%a in ('netstat -aon ^| find ":5173"') do (
-    echo Arret du processus frontend %%a
-    taskkill /F /PID %%a >nul 2>&1
+:: Arreter le serveur backend s'il est en cours d'execution
+for /f "tokens=5" %%a in ('netstat -ano ^| findstr :3001 ^| findstr LISTENING') do (
+    echo Arret du processus backend %%a
+    taskkill /F /PID %%a 2>nul
+)
+
+echo Verification de MySQL...
+sc query MySQL >nul 2>&1
+if %ERRORLEVEL% NEQ 0 (
+    echo MySQL n'est pas en cours d'execution. Demarrage de MySQL...
+    net start MySQL >nul 2>&1
+    if %ERRORLEVEL% NEQ 0 (
+        echo Impossible de demarrer MySQL. Assurez-vous que MySQL est installe correctement.
+        exit /b 1
+    )
 )
 
 echo Demarrage des nouveaux serveurs...
 
-REM Demarrer le serveur backend
-start "Backend Server" cmd /c "cd server && node index.js"
+:: Creer la base de donnees si elle n'existe pas
+mysql -u root -e "CREATE DATABASE IF NOT EXISTS gestion_distribution;" >nul 2>&1
 
-REM Attendre quelques secondes pour que le backend démarre
-timeout /t 5 /nobreak
+:: Demarrer le serveur backend dans une nouvelle fenetre
+start "Backend Server" cmd /c "cd /d %~dp0 && node server.js"
 
-REM Demarrer le serveur frontend
-start "Frontend Server" cmd /c "npm run dev"
+:: Attendre 5 secondes pour que le backend demarre
+echo Attendre 5 secondes, appuyez sur CTRL+C pour quitter ...
+timeout /t 5 /nobreak >nul
+
+:: Demarrer le serveur frontend dans une nouvelle fenetre
+start "Frontend Server" cmd /c "cd /d %~dp0 && npm run dev"
 
 echo Les serveurs ont ete demarres avec succes !
 echo Backend: http://localhost:3001
 echo Frontend: http://localhost:5173
+echo.
+echo Pour tester le backend, visitez : http://localhost:3001/api/health
+echo Pour utiliser l'application, visitez : http://localhost:5173
 echo.
 echo Pour arreter les serveurs, fermez simplement les fenetres correspondantes.
 pause

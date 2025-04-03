@@ -4,18 +4,25 @@ const mysql = require('mysql2/promise');
 const { REQUIRED_COLUMNS, suggestColumnMapping, validateExcelColumns, validateExcelData } = require('./lib/excelMapping');
 require('dotenv').config();
 
+console.log('Configuration de l\'environnement:', {
+  DB_HOST: process.env.DB_HOST || 'localhost',
+  DB_USER: process.env.DB_USER || 'root',
+  DB_NAME: process.env.DB_NAME || 'gestion_distribution',
+  DB_PORT: process.env.DB_PORT || '3306'
+});
+
 const app = express();
 
 // Configuration CORS plus permissive en développement
 const corsOptions = {
-  origin: true, // Permet toutes les origines en développement
+  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://10.243.10.228:5173'],
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
   credentials: true,
   allowedHeaders: ['Content-Type', 'Authorization']
 };
 
 app.use(cors(corsOptions));
-app.use(express.json({ limit: '50mb' })); // Augmenter la limite pour les gros fichiers
+app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // Configuration de la base de données
@@ -30,147 +37,168 @@ const dbConfig = {
   queueLimit: 0
 };
 
-// Création du pool de connexions
+console.log('Configuration de la base de données:', {
+  ...dbConfig,
+  password: dbConfig.password ? '***' : ''
+});
+
+// Créer le pool de connexions
 const pool = mysql.createPool(dbConfig);
 
-// Fonction pour initialiser la base de données
-const initializeDatabase = async () => {
+// Test de la connexion
+async function testConnection() {
   try {
     const connection = await pool.getConnection();
-    console.log('Connected to database successfully');
-    
-    // Créer la table sites si elle n'existe pas
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS sites (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        name VARCHAR(255) NOT NULL,
-        address TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
-      )
-    `);
-    console.log('Sites table checked/created');
-
-    // Créer la table households si elle n'existe pas
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS households (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        site_name VARCHAR(255) NOT NULL,
-        household_id VARCHAR(255) NOT NULL,
-        token_number VARCHAR(50) NOT NULL,
-        beneficiary_count INT NOT NULL,
-        first_name VARCHAR(255) NOT NULL,
-        middle_name VARCHAR(255),
-        last_name VARCHAR(255) NOT NULL,
-        site_address TEXT,
-        alternate_recipient TEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        UNIQUE KEY unique_token (token_number),
-        UNIQUE KEY unique_household (site_name, household_id)
-      )
-    `);
-    console.log('Households table checked/created');
-
-    // Mettre à jour la table si elle existe déjà
-    try {
-      // Vérifier si les nouvelles colonnes existent
-      const [columns] = await connection.query(`
-        SELECT COLUMN_NAME 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_NAME = 'households'
-      `);
-      
-      const columnNames = columns.map(col => col.COLUMN_NAME.toLowerCase());
-      
-      // Ajouter les nouvelles colonnes si elles n'existent pas
-      if (!columnNames.includes('site_address')) {
-        await connection.query('ALTER TABLE households ADD COLUMN site_address TEXT AFTER last_name');
-      }
-      if (!columnNames.includes('alternate_recipient')) {
-        await connection.query('ALTER TABLE households ADD COLUMN alternate_recipient TEXT AFTER site_address');
-      }
-      
-      console.log('Households table structure updated');
-    } catch (error) {
-      console.error('Error updating households table:', error);
-    }
-
-    // Créer la table recipients si elle n'existe pas
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS recipients (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        household_id INT NOT NULL,
-        first_name VARCHAR(255) NOT NULL,
-        middle_name VARCHAR(255) NOT NULL,
-        last_name VARCHAR(255) NOT NULL,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE
-      )
-    `);
-    console.log('Recipients table checked/created');
-
-    // Créer la table distributions si elle n'existe pas
-    await connection.query(`
-      CREATE TABLE IF NOT EXISTS distributions (
-        id INT PRIMARY KEY AUTO_INCREMENT,
-        household_id INT NOT NULL,
-        distribution_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        status ENUM('pending', 'distributed', 'cancelled') DEFAULT 'pending',
-        signature_data MEDIUMTEXT,
-        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-        FOREIGN KEY (household_id) REFERENCES households(id) ON DELETE CASCADE,
-        INDEX idx_distribution_date (distribution_date),
-        UNIQUE INDEX idx_unique_distribution (household_id, distribution_date)
-      )
-    `);
-    console.log('Distributions table checked/created');
-
-    // Mettre à jour la table si elle existe déjà
-    try {
-      // Vérifier si les nouvelles colonnes existent
-      const [columns] = await connection.query(`
-        SELECT COLUMN_NAME 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_NAME = 'distributions'
-      `);
-      
-      const columnNames = columns.map(col => col.COLUMN_NAME.toLowerCase());
-      
-      // Ajouter les nouvelles colonnes si elles n'existent pas
-      if (!columnNames.includes('signature_data')) {
-        await connection.query('ALTER TABLE distributions ADD COLUMN signature_data MEDIUMTEXT AFTER status');
-      }
-      
-      console.log('Distributions table structure updated');
-    } catch (error) {
-      console.error('Error updating distributions table:', error);
-    }
-
+    console.log('Connexion à la base de données réussie');
     connection.release();
-    console.log('Database initialized successfully');
+    return true;
   } catch (error) {
-    console.error('Error initializing database:', error);
-    process.exit(1); // Arrêter le serveur en cas d'erreur de base de données
+    console.error('Erreur de connexion à la base de données:', error);
+    throw error;
   }
-};
+}
 
-// Initialiser la base de données au démarrage
-initializeDatabase();
+// Fonction pour initialiser la base de données
+async function initializeDatabase() {
+  let connection;
+  try {
+    console.log('Tentative de connexion à MySQL...');
+    connection = await mysql.createConnection({
+      host: process.env.DB_HOST,
+      user: process.env.DB_USER,
+      password: process.env.DB_PASSWORD || '',
+    });
+
+    console.log('Connexion à MySQL établie avec succès');
+
+    // Créer la base de données si elle n'existe pas
+    await connection.query(`CREATE DATABASE IF NOT EXISTS ${process.env.DB_NAME}`);
+    console.log(`Base de données "${process.env.DB_NAME}" créée ou vérifiée`);
+
+    // Utiliser la base de données
+    await connection.query(`USE ${process.env.DB_NAME}`);
+    console.log(`Base de données "${process.env.DB_NAME}" sélectionnée`);
+
+    // Créer les tables
+    await connection.query(`DROP TABLE IF EXISTS distributions`);
+    await connection.query(`DROP TABLE IF EXISTS recipients`);
+    await connection.query(`DROP TABLE IF EXISTS households`);
+    await connection.query(`DROP TABLE IF EXISTS sites`);
+
+    // Créer la table sites
+    await connection.query(`
+      CREATE TABLE sites (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nom VARCHAR(255) NOT NULL,
+        adresse VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    console.log('Table sites créée avec succès');
+
+    // Créer la table households sans clé étrangère
+    await connection.query(`
+      CREATE TABLE households (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        site_id INT,
+        household_number VARCHAR(50) NOT NULL,
+        head_name VARCHAR(255) NOT NULL,
+        members_count INT DEFAULT 1,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    console.log('Table households créée avec succès');
+
+    // Créer la table recipients sans clé étrangère
+    await connection.query(`
+      CREATE TABLE recipients (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        household_id INT,
+        name VARCHAR(255) NOT NULL,
+        age INT,
+        gender VARCHAR(50),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    console.log('Table recipients créée avec succès');
+
+    // Créer la table distributions sans clé étrangère
+    await connection.query(`
+      CREATE TABLE distributions (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        site_id INT,
+        distribution_date DATE NOT NULL,
+        items_distributed TEXT,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    console.log('Table distributions créée avec succès');
+
+    // Ajouter les clés étrangères
+    await connection.query(`
+      ALTER TABLE households
+      ADD CONSTRAINT fk_households_site
+      FOREIGN KEY (site_id) REFERENCES sites(id)
+    `);
+    console.log('Clé étrangère ajoutée à households');
+
+    await connection.query(`
+      ALTER TABLE recipients
+      ADD CONSTRAINT fk_recipients_household
+      FOREIGN KEY (household_id) REFERENCES households(id)
+    `);
+    console.log('Clé étrangère ajoutée à recipients');
+
+    await connection.query(`
+      ALTER TABLE distributions
+      ADD CONSTRAINT fk_distributions_site
+      FOREIGN KEY (site_id) REFERENCES sites(id)
+    `);
+    console.log('Clé étrangère ajoutée à distributions');
+
+    console.log('Initialisation de la base de données terminée avec succès');
+  } catch (error) {
+    console.error('Erreur lors de l\'initialisation de la base de données:', error);
+    throw error;
+  } finally {
+    if (connection) {
+      await connection.end();
+    }
+  }
+}
 
 // Middleware pour vérifier la connexion à la base de données
 const checkDatabaseConnection = async (req, res, next) => {
   try {
+    console.log('Tentative de connexion à la base de données...');
     const connection = await pool.getConnection();
+    await connection.ping();
     connection.release();
+    console.log('Connexion à la base de données réussie');
+    
     next();
   } catch (error) {
-    console.error('Database connection error:', error);
-    res.status(500).json({ error: 'Database connection error' });
+    console.error('Erreur de connexion à la base de données:', error);
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Unable to connect to database',
+      details: error.message 
+    });
   }
 };
+
+// Initialiser la base de données au démarrage
+initializeDatabase()
+  .then(() => {
+    console.log('Initialisation de la base de données terminée avec succès');
+  })
+  .catch(error => {
+    console.error('Erreur lors de l\'initialisation:', error);
+    process.exit(1);
+  });
+
+// Appliquer le middleware de vérification de connexion à toutes les routes API
+app.use('/api', checkDatabaseConnection);
 
 // Middleware de journalisation
 app.use((req, res, next) => {
@@ -211,17 +239,18 @@ app.get('/api/health', async (req, res) => {
     });
   } catch (error) {
     console.error('Health check failed:', error);
-    res.status(500).json({ status: 'error', message: error.message });
+    res.status(500).json({ 
+      status: 'error', 
+      message: 'Health check failed',
+      details: error.message 
+    });
   }
 });
-
-// Appliquer le middleware de vérification de connexion à toutes les routes API
-app.use('/api', checkDatabaseConnection);
 
 // Routes API
 app.get('/api/sites', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM sites ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT * FROM sites ORDER BY created_at DESC');
     res.json(rows);
   } catch (error) {
     console.error('Error fetching sites:', error);
@@ -229,33 +258,9 @@ app.get('/api/sites', async (req, res) => {
   }
 });
 
-app.post('/api/sites', async (req, res) => {
-  try {
-    const { nom, adresse } = req.body;
-    if (!nom) {
-      return res.status(400).json({ error: 'Le nom du site est requis' });
-    }
-
-    const [result] = await pool.execute(
-      'INSERT INTO sites (name, address) VALUES (?, ?)',
-      [nom, adresse || null]
-    );
-
-    const [newSite] = await pool.execute(
-      'SELECT * FROM sites WHERE id = ?',
-      [result.insertId]
-    );
-
-    res.status(201).json(newSite[0]);
-  } catch (error) {
-    console.error('Error creating site:', error);
-    res.status(500).json({ error: error.message });
-  }
-});
-
 app.get('/api/households', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM households ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT * FROM households ORDER BY created_at DESC');
     res.json(rows);
   } catch (error) {
     console.error('Error fetching households:', error);
@@ -265,7 +270,7 @@ app.get('/api/households', async (req, res) => {
 
 app.get('/api/recipients', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM recipients ORDER BY created_at DESC');
+    const [rows] = await pool.query('SELECT * FROM recipients ORDER BY created_at DESC');
     res.json(rows);
   } catch (error) {
     console.error('Error fetching recipients:', error);
@@ -275,7 +280,7 @@ app.get('/api/recipients', async (req, res) => {
 
 app.get('/api/distributions', async (req, res) => {
   try {
-    const [rows] = await pool.execute('SELECT * FROM distributions ORDER BY distribution_date DESC');
+    const [rows] = await pool.query('SELECT * FROM distributions ORDER BY created_at DESC');
     res.json(rows);
   } catch (error) {
     console.error('Error fetching distributions:', error);
@@ -772,7 +777,14 @@ app.use((err, req, res, next) => {
   res.status(500).json({ error: 'Internal server error' });
 });
 
-const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
-});
+const port = process.env.PORT || 3001;
+testConnection()
+  .then(() => {
+    app.listen(port, () => {
+      console.log(`Server is running on port ${port}`);
+    });
+  })
+  .catch(error => {
+    console.error('Erreur lors de l\'initialisation:', error);
+    process.exit(1);
+  });
