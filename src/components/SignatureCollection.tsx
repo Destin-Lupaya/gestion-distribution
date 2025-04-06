@@ -283,32 +283,43 @@ export default function SignatureCollection() {
   const handleSave = async () => {
     if (signaturePad && !signaturePad.isEmpty()) {
       try {
+        setLoading(true);
         const signatureData = signaturePad.toDataURL();
         
-        // Record signature using API
-        const response = await apiService.post('/api/record-signature', {
-          householdId: beneficiaryInfo?.household_id,
-          signatureData
+        if (!beneficiaryInfo) {
+          throw new Error('Informations du bénéficiaire manquantes');
+        }
+        
+        // Enregistrer la distribution avec toutes les données nécessaires
+        console.log('Enregistrement de la distribution avec les données:', beneficiaryInfo);
+        const response = await apiService.registerDistribution({
+          site_name: beneficiaryInfo.site_name || 'Site par défaut',
+          household_id: beneficiaryInfo.household_id,
+          token_number: beneficiaryInfo.token_number,
+          beneficiary_count: beneficiaryInfo.beneficiary_count || 1,
+          first_name: beneficiaryInfo.first_name,
+          middle_name: beneficiaryInfo.middle_name || '',
+          last_name: beneficiaryInfo.last_name,
+          site_address: beneficiaryInfo.site_address || '',
+          alternate_recipient: beneficiaryInfo.alternate_recipient || '',
+          signature: signatureData
         });
 
-        if (!response.ok) {
-          throw new Error('Erreur lors de l\'enregistrement de la signature');
-        }
-
-        toast.success('Signature enregistrée avec succès');
+        toast.success('Distribution enregistrée avec succès');
         
         // Reset form
         setBeneficiaryInfo(null);
+        setSignature(null);
         setShowSignaturePad(false);
-        if (signaturePad) {
-          signaturePad.clear();
-        }
-      } catch (err) {
-        console.error('Save error:', err);
-        toast.error('Erreur lors de l\'enregistrement');
+        setShowScanner(true);
+      } catch (error) {
+        console.error('Erreur lors de l\'enregistrement de la distribution:', error);
+        toast.error(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement');
+      } finally {
+        setLoading(false);
       }
     } else {
-      toast.error('Veuillez signer avant de sauvegarder');
+      toast.error('Veuillez ajouter une signature');
     }
   };
 
