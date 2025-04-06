@@ -129,6 +129,14 @@ class ApiService {
   async importData(data: any) {
     return this.post(API_CONFIG.ENDPOINTS.IMPORT, data);
   }
+
+  /**
+   * Méthode pour récupérer les distributions
+   * @returns Liste des distributions
+   */
+  async getDistributions() {
+    return this.get(API_CONFIG.ENDPOINTS.GET_DISTRIBUTIONS);
+  }
 }
 
 // Exporter une instance singleton du service
