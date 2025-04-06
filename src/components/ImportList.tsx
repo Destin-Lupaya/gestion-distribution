@@ -204,7 +204,7 @@ const ImportList: React.FC = () => {
       setColumnMapping(mapping);
 
       const rows = jsonData.slice(1).map((row: any) => {
-        const mappedRow: ImportRow = {
+        const mappedRow: ImportRow & { isValid: boolean } = {
           site_name: '',
           household_id: '',
           household_name: '',
@@ -214,7 +214,8 @@ const ImportList: React.FC = () => {
           middle_name: '',
           last_name: '',
           site_address: '',
-          alternate_recipient: ''
+          alternate_recipient: '',
+          isValid: true
         };
 
         Object.entries(mapping).forEach(([field, header]) => {
@@ -239,10 +240,32 @@ const ImportList: React.FC = () => {
         
         if (missingFields.length > 0) {
           console.warn(`Row missing required fields: ${missingFields.join(', ')}`);
+          mappedRow.isValid = false;
         }
         
         return mappedRow;
       });
+
+      // Filtrer les lignes invalides
+      const validRows = rows.filter(row => row.isValid).map(({ isValid, ...rest }) => rest as ImportRow);
+      const invalidRowsCount = rows.length - validRows.length;
+      
+      if (invalidRowsCount > 0) {
+        setImportStats(prev => {
+          if (!prev) return {
+            totalRows: rows.length,
+            validRows: validRows.length,
+            errorRows: invalidRowsCount,
+            warnings: [`${invalidRowsCount} lignes ont été ignorées car elles manquaient de champs obligatoires.`]
+          };
+          
+          return {
+            ...prev,
+            errorRows: prev.errorRows + invalidRowsCount,
+            warnings: [...prev.warnings, `${invalidRowsCount} lignes ont été ignorées car elles manquaient de champs obligatoires.`]
+          };
+        });
+      }
 
       let dataIsValid: boolean;
       let errors: string[];
@@ -252,7 +275,7 @@ const ImportList: React.FC = () => {
           const dataValidation = await fetch('http://localhost:3001/api/validate-data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ data: rows })
+            body: JSON.stringify({ data: validRows })
           });
 
           if (dataValidation.ok) {
@@ -260,17 +283,17 @@ const ImportList: React.FC = () => {
             dataIsValid = result.isValid;
             errors = result.errors;
           } else {
-            const result = validateData(rows);
+            const result = validateData(validRows);
             dataIsValid = result.isValid;
             errors = result.errors;
           }
         } catch (error) {
-          const result = validateData(rows);
+          const result = validateData(validRows);
           dataIsValid = result.isValid;
           errors = result.errors;
         }
       } else {
-        const result = validateData(rows);
+        const result = validateData(validRows);
         dataIsValid = result.isValid;
         errors = result.errors;
       }
@@ -280,7 +303,7 @@ const ImportList: React.FC = () => {
         return;
       }
 
-      setTempFileData(rows);
+      setTempFileData(validRows);
       setShowMappingDialog(true);
     } catch (error) {
       console.error('Error processing file:', error);

@@ -17,6 +17,7 @@ import {
 import { QrReader } from 'react-qr-reader';
 import SignaturePad from 'react-signature-canvas';
 import toast from 'react-hot-toast';
+import apiService from '../services/apiService';
 
 interface BeneficiaryInfo {
   id: number;
@@ -158,22 +159,10 @@ export default function SignatureCollection() {
 
     setLoading(true);
     try {
-      const response = await fetch('http://localhost:3001/api/register-distribution', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          ...manualFormData,
-          signature
-        }),
+      const response = await apiService.registerDistribution({
+        ...manualFormData,
+        signature
       });
-
-      const result = await response.json();
-
-      if (!response.ok) {
-        throw new Error(result.error || 'Erreur lors de l\'enregistrement');
-      }
 
       toast.success('Distribution enregistrée avec succès');
       // Reset form
@@ -246,20 +235,20 @@ export default function SignatureCollection() {
       }
 
       const result = await retryApiCall(async () => {
-        const response = await fetch('http://localhost:3001/api/process-qr-scan', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ qrData }),
-        });
-
-        if (!response.ok) {
-          const errorData = await response.json().catch(() => ({ error: 'Erreur de connexion au serveur' }));
-          throw new Error(errorData.error || 'Erreur lors du traitement du QR code');
+        try {
+          // Appel direct à l'API qui retourne déjà le JSON parsé
+          const response = await apiService.validateQr({ qrCode: data });
+          
+          // Vérifier si la réponse contient une erreur
+          if (!response.valid) {
+            throw new Error(response.message || 'QR code non valide');
+          }
+          
+          return response;
+        } catch (error) {
+          console.error('API error:', error);
+          throw new Error(error instanceof Error ? error.message : 'Erreur lors du traitement du QR code');
         }
-
-        return response.json();
       });
 
       // Play success sound
@@ -297,12 +286,9 @@ export default function SignatureCollection() {
         const signatureData = signaturePad.toDataURL();
         
         // Record signature using API
-        const response = await fetch('http://localhost:3001/api/record-signature', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({ householdId: beneficiaryInfo?.household_id, signatureData }),
+        const response = await apiService.post('/api/record-signature', {
+          householdId: beneficiaryInfo?.household_id,
+          signatureData
         });
 
         if (!response.ok) {

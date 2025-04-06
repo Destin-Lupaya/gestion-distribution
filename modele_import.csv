@@ -1,0 +1,4 @@
+site_name,household_id,household_name,token_number,beneficiary_count,first_name,middle_name,last_name,site_address,alternate_recipient
+Kinshasa Est,MEN001,Famille Dupont,TOK001,4,Jean,Pierre,Dupont,123 Avenue Principale,Marie Dupont
+Kinshasa Ouest,MEN002,Famille Martin,TOK002,3,Paul,Jacques,Martin,456 Rue Secondaire,
+Kinshasa Sud,MEN003,Famille Dubois,TOK003,5,Sophie,,Dubois,789 Boulevard Central,
