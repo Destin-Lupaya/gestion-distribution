@@ -59,11 +59,15 @@ const UnifiedReport: React.FC = () => {
     // Charger la liste des sites
     const loadSites = async () => {
       try {
+        setLoading(true);
         const response = await fetch('http://localhost:3001/api/sites');
         const data = await response.json();
         setSites(data);
       } catch (error) {
+        console.error('Error loading sites:', error);
         setError('Erreur lors du chargement des sites');
+      } finally {
+        setLoading(false);
       }
     };
     loadSites();

@@ -457,49 +457,94 @@ app.post('/api/validate-qr', async (req, res) => {
   try {
     const { qrCode } = req.body;
     if (!qrCode) {
-      return res.status(400).json({ error: 'QR code is required' });
+      return res.status(400).json({ 
+        valid: false,
+        message: 'QR code est requis' 
+      });
     }
     
-    let qrData;
+    let tokenNumber;
+    
+    // Essayer de parser le QR code comme JSON
     try {
-      qrData = JSON.parse(qrCode);
+      const qrData = JSON.parse(qrCode);
+      tokenNumber = qrData.token_number;
+      
+      if (!tokenNumber) {
+        return res.status(400).json({ 
+          valid: false,
+          message: 'Numéro de jeton manquant dans le QR code' 
+        });
+      }
     } catch (error) {
-      return res.status(400).json({ error: 'Invalid QR code format' });
+      // Si ce n'est pas du JSON valide, considérer que c'est directement le numéro de jeton
+      console.log('QR code is not valid JSON, using as token_number:', qrCode);
+      tokenNumber = qrCode;
     }
+    
+    console.log('Searching for household with token number:', tokenNumber);
     
     const connection = await pool.getConnection();
     const [households] = await connection.query(
       'SELECT * FROM households WHERE token_number = ?',
-      [qrData.token_number]
+      [tokenNumber]
     );
     connection.release();
     
     if (households.length === 0) {
-      return res.status(404).json({ error: 'Household not found' });
+      return res.status(404).json({ 
+        valid: false,
+        message: 'Ménage non trouvé avec ce numéro de jeton' 
+      });
     }
     
     const household = households[0];
+    
+    // Récupérer les informations du site associé au ménage
+    const connection2 = await pool.getConnection();
+    const [sites] = await connection2.query(
+      'SELECT * FROM sites WHERE id = ?',
+      [household.site_id]
+    );
     
     // Vérifier si une distribution a déjà été effectuée aujourd'hui
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const connection2 = await pool.getConnection();
     const [distributions] = await connection2.query(
-      'SELECT * FROM distributions WHERE household_id = ? AND DATE(distribution_date) = DATE(?)',
+      'SELECT * FROM distributions WHERE household_id = ? AND DATE(date_distribution) = DATE(?)',
       [household.id, today]
     );
     connection2.release();
     
+    // Construire l'objet de réponse avec toutes les informations nécessaires
+    const beneficiaryData = {
+      id: household.id,
+      household_id: household.id,
+      site_id: household.site_id,
+      site_name: sites.length > 0 ? sites[0].name : 'Site inconnu',
+      site_address: sites.length > 0 ? sites[0].address : '',
+      token_number: household.token_number,
+      beneficiary_count: household.beneficiary_count,
+      first_name: household.first_name,
+      middle_name: household.middle_name,
+      last_name: household.last_name,
+      alternate_recipient: household.alternate_recipient || ''
+    };
+    
     res.json({
       valid: true,
-      household: household,
+      message: 'Bénéficiaire trouvé',
+      data: beneficiaryData,
       alreadyDistributed: distributions.length > 0,
       distributions: distributions
     });
   } catch (error) {
     console.error('Error validating QR code:', error);
-    res.status(500).json({ error: 'Failed to validate QR code' });
+    res.status(500).json({ 
+      valid: false,
+      message: 'Erreur lors de la validation du QR code: ' + error.message 
+    });
   }
 });
 
@@ -698,8 +743,8 @@ app.post('/api/register-distribution', async (req, res) => {
       
       try {
         await connection.query(
-          'INSERT INTO distributions (id, household_id, site_id, date_distribution, signature, recipient_id, statut, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-          [distributionId, householdId, siteId, now, signature, recipientId, 'completee', now]
+          'INSERT INTO distributions (id, household_id, distribution_date, signature, status, created_at) VALUES (?, ?, ?, ?, ?, ?)',
+          [distributionId, householdId, now, signature, 'completee', now]
         );
       } catch (insertError) {
         console.error('Erreur lors de la création de la distribution:', insertError);
@@ -930,13 +975,13 @@ app.get('/api/distributions', async (req, res) => {
     
     // Récupérer les distributions avec les informations des ménages et des bénéficiaires
     const [distributions] = await connection.query(`
-      SELECT d.id, d.household_id, d.site_id, d.date_distribution, d.statut,
+      SELECT d.id, d.household_id, d.distribution_date, d.status,
              h.token_number, h.household_name, h.first_name, h.last_name,
-             s.nom as site_name
+             s.name as site_name, s.id as site_id
       FROM distributions d
       JOIN households h ON d.household_id = h.id
-      JOIN sites s ON d.site_id = s.id
-      ORDER BY d.date_distribution DESC
+      JOIN sites s ON h.site_id = s.id
+      ORDER BY d.distribution_date DESC
       LIMIT 100
     `);
     

@@ -1,20 +1,22 @@
-import { useState, useEffect } from 'react';
-import {
-  Paper,
-  Typography,
-  Button,
-  Box,
-  Grid,
-  Dialog,
-  DialogTitle,
-  DialogContent,
+import React, { useState, useEffect } from 'react';
+import { 
+  Box, 
+  Button, 
+  Typography, 
+  Paper, 
+  Grid, 
+  TextField, 
+  Tab, 
+  Tabs, 
+  Dialog, 
+  DialogTitle, 
+  DialogContent, 
   DialogActions,
-  TextField,
-  CircularProgress,
-  Tabs,
-  Tab
+  CircularProgress
 } from '@mui/material';
-import { QrReader } from 'react-qr-reader';
+import {
+  QrReader
+} from 'react-qr-reader';
 import SignaturePad from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import apiService from '../services/apiService';
@@ -36,7 +38,7 @@ interface BeneficiaryInfo {
 export default function SignatureCollection() {
   const [activeTab, setActiveTab] = useState(0);
   const [signaturePad, setSignaturePad] = useState<SignaturePad | null>(null);
-  const [beneficiaryInfo, setBeneficiaryInfo] = useState<BeneficiaryInfo | null>(null);
+  const [beneficiaryInfo, setBeneficiaryInfo] = useState<any>(null);
   const [showScanner, setShowScanner] = useState(false);
   const [showSignaturePad, setShowSignaturePad] = useState(false);
   const [signature, setSignature] = useState<string | null>(null);
@@ -57,7 +59,6 @@ export default function SignatureCollection() {
     }
   });
   const [error, setError] = useState<string | null>(null);
-  const [step, setStep] = useState('scan');
 
   const playSuccessSound = () => {
     if (!audioContext) return;
@@ -136,11 +137,8 @@ export default function SignatureCollection() {
       }
     };
     
-    // Only try to access camera if we're in the scanning step
-    if (step === 'scan') {
-      getCameras();
-    }
-  }, [step]);
+    getCameras();
+  }, []);
 
   const handleManualChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -159,7 +157,7 @@ export default function SignatureCollection() {
 
     setLoading(true);
     try {
-      const response = await apiService.registerDistribution({
+      await apiService.registerDistribution({
         ...manualFormData,
         signature
       });
@@ -218,7 +216,10 @@ export default function SignatureCollection() {
   };
 
   const handleQrCodeScan = async (data: string | null) => {
-    if (!data || data === lastScannedData) return;
+    // Éviter les traitements multiples du même QR code ou si un scan est déjà en cours
+    if (!data || data === lastScannedData || scanning) return;
+    
+    // Marquer le début du scan et réinitialiser les états
     setLastScannedData(data);
     setScanning(true);
     setScanError(null);
@@ -227,44 +228,76 @@ export default function SignatureCollection() {
     try {
       console.log('Scanned QR code data:', data);
 
-      let qrData;
+      // Vérifier si les données sont au format JSON
       try {
-        qrData = JSON.parse(data);
+        const parsedData = JSON.parse(data);
+        console.log('QR code data is valid JSON:', parsedData);
+        
+        // Si c'est du JSON, extraire le token_number s'il existe
+        if (parsedData && parsedData.token_number) {
+          console.log('Token number from JSON:', parsedData.token_number);
+        }
       } catch (e) {
-        qrData = { token_number: data };
+        // Ce n'est pas du JSON, utiliser les données brutes comme token_number
+        console.log('QR code data is not valid JSON, using as token_number');
       }
 
-      const result = await retryApiCall(async () => {
-        try {
-          // Appel direct à l'API qui retourne déjà le JSON parsé
-          const response = await apiService.validateQr({ qrCode: data });
+      // Appel à l'API avec gestion des erreurs et des retries
+      try {
+        const result = await retryApiCall(async () => {
+          // Utiliser un timeout pour éviter les blocages indéfinis
+          const timeoutPromise = new Promise((_, reject) => 
+            setTimeout(() => reject(new Error("Délai d'attente dépassé")), 10000)
+          );
           
-          // Vérifier si la réponse contient une erreur
-          if (!response.valid) {
-            throw new Error(response.message || 'QR code non valide');
+          // Appel API avec timeout
+          const apiCallPromise = apiService.validateQr({ qrCode: data });
+          
+          // Race entre l'appel API et le timeout
+          const apiResponse = await Promise.race([apiCallPromise, timeoutPromise]) as any;
+          
+          if (!apiResponse || !apiResponse.valid) {
+            throw new Error(apiResponse?.message || 'QR code non valide');
           }
           
-          return response;
-        } catch (error) {
-          console.error('API error:', error);
-          throw new Error(error instanceof Error ? error.message : 'Erreur lors du traitement du QR code');
-        }
-      });
+          return apiResponse;
+        });
 
-      // Play success sound
-      playSuccessSound();
-      
-      setBeneficiaryInfo(result.data);
-      setShowScanner(false);
-      setShowSignaturePad(true);
-      toast.success('Bénéficiaire trouvé');
+        // Traitement du succès
+        if (result && result.data) {
+          // Jouer le son de succès
+          playSuccessSound();
+          
+          console.log('Beneficiary data from API:', result.data);
+          
+          // Mettre à jour l'interface utilisateur
+          setBeneficiaryInfo(result.data);
+          
+          // Fermer le scanner et afficher le pad de signature
+          // Utiliser requestAnimationFrame pour éviter les problèmes de rendu
+          requestAnimationFrame(() => {
+            setShowScanner(false);
+            setTimeout(() => setShowSignaturePad(true), 100);
+          });
+          
+          toast.success('Bénéficiaire trouvé');
+        } else {
+          throw new Error('Données du bénéficiaire non trouvées dans la réponse de l\'API');
+        }
+      } catch (error) {
+        console.error('Error processing QR code:', error);
+        setScanError(error instanceof Error ? error.message : 'Erreur lors du scan');
+        toast.error(error instanceof Error ? error.message : 'Erreur lors du scan');
+        setBeneficiaryInfo(null);
+      }
     } catch (error) {
-      console.error('Error processing QR code:', error);
-      setScanError(error instanceof Error ? error.message : 'Erreur lors du scan');
-      toast.error(error instanceof Error ? error.message : 'Erreur lors du scan');
-      setBeneficiaryInfo(null);
+      console.error('Unexpected error during QR code processing:', error);
+      toast.error('Une erreur inattendue s\'est produite');
     } finally {
+      // Réinitialiser l'état de scanning
       setScanning(false);
+      
+      // Réinitialiser lastScannedData après un délai pour permettre de scanner à nouveau
       setTimeout(() => {
         setLastScannedData(null);
         setRetryCount(0);
@@ -292,7 +325,7 @@ export default function SignatureCollection() {
         
         // Enregistrer la distribution avec toutes les données nécessaires
         console.log('Enregistrement de la distribution avec les données:', beneficiaryInfo);
-        const response = await apiService.registerDistribution({
+        await apiService.registerDistribution({
           site_name: beneficiaryInfo.site_name || 'Site par défaut',
           household_id: beneficiaryInfo.household_id,
           token_number: beneficiaryInfo.token_number,
@@ -320,6 +353,47 @@ export default function SignatureCollection() {
       }
     } else {
       toast.error('Veuillez ajouter une signature');
+    }
+  };
+
+  // Nouvelle fonction pour enregistrer directement la distribution
+  const handleRegisterDistribution = async () => {
+    if (!beneficiaryInfo) {
+      toast.error('Informations du bénéficiaire manquantes');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Générer une signature par défaut si nécessaire
+      const signatureData = signature || 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+      
+      console.log('Enregistrement de la distribution avec les données:', beneficiaryInfo);
+      await apiService.registerDistribution({
+        site_name: beneficiaryInfo.site_name || 'Site par défaut',
+        household_id: beneficiaryInfo.household_id,
+        token_number: beneficiaryInfo.token_number,
+        beneficiary_count: beneficiaryInfo.beneficiary_count || 1,
+        first_name: beneficiaryInfo.first_name,
+        middle_name: beneficiaryInfo.middle_name || '',
+        last_name: beneficiaryInfo.last_name,
+        site_address: beneficiaryInfo.site_address || '',
+        alternate_recipient: beneficiaryInfo.alternate_recipient || '',
+        signature: signatureData
+      });
+
+      toast.success('Distribution enregistrée avec succès');
+      
+      // Reset form
+      setBeneficiaryInfo(null);
+      setSignature(null);
+      setShowSignaturePad(false);
+      setShowScanner(true);
+    } catch (error) {
+      console.error('Erreur lors de l\'enregistrement de la distribution:', error);
+      toast.error(error instanceof Error ? error.message : 'Erreur lors de l\'enregistrement');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -372,6 +446,19 @@ export default function SignatureCollection() {
                   <Typography><strong>Numéro Token:</strong> {beneficiaryInfo.token_number}</Typography>
                 </Grid>
               </Grid>
+              
+              {/* Bouton d'enregistrement de distribution */}
+              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
+                <Button 
+                  variant="contained" 
+                  color="primary" 
+                  onClick={handleRegisterDistribution}
+                  disabled={loading}
+                  sx={{ mt: 1 }}
+                >
+                  {loading ? <CircularProgress size={24} /> : 'Enregistrer la distribution'}
+                </Button>
+              </Box>
             </Paper>
           )}
         </Box>
@@ -547,9 +634,9 @@ export default function SignatureCollection() {
                     position: 'relative',
                     overflow: 'hidden'
                   }}
-                  scanDelay={300}
+                  scanDelay={500} // Augmenter le délai entre les scans
                   onResult={(result) => {
-                    if (result) {
+                    if (result && !scanning) { // Ajouter une vérification pour éviter les scans multiples
                       debouncedHandleQrCodeScan(result.getText());
                     }
                   }}
