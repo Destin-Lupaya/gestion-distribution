@@ -8,6 +8,47 @@ require('dotenv').config();
 const app = express();
 const PORT = process.env.PORT || 3001;
 
+// Fonction pour initialiser la base de données
+async function initializeDatabase() {
+  try {
+    const connection = await mysql.createConnection({
+      host: process.env.DB_HOST || 'localhost',
+      user: process.env.DB_USER || 'root',
+      password: process.env.DB_PASSWORD || '',
+      database: process.env.DB_NAME || 'gestion_distribution',
+      port: parseInt(process.env.DB_PORT || '3306', 10),
+      multipleStatements: true
+    });
+
+    // Vérifier si la colonne signature existe dans la table distributions
+    const [columns] = await connection.query(`
+      SELECT COLUMN_NAME 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'distributions' AND COLUMN_NAME = 'signature'
+    `, [process.env.DB_NAME || 'gestion_distribution']);
+
+    // Si la colonne signature n'existe pas, l'ajouter
+    if (columns.length === 0) {
+      console.log('Ajout de la colonne signature à la table distributions...');
+      await connection.query(`
+        ALTER TABLE distributions 
+        ADD COLUMN signature LONGTEXT AFTER distribution_date
+      `);
+      console.log('Colonne signature ajoutée avec succès');
+    } else {
+      console.log('La colonne signature existe déjà dans la table distributions');
+    }
+
+    await connection.end();
+    console.log('Initialisation de la base de données terminée');
+  } catch (error) {
+    console.error('Erreur lors de l\'initialisation de la base de données:', error);
+  }
+}
+
+// Initialiser la base de données au démarrage du serveur
+initializeDatabase();
+
 // Database configuration
 const dbConfig = {
   host: process.env.DB_HOST || 'localhost',
@@ -853,6 +894,28 @@ app.post('/api/register-distribution', async (req, res) => {
     }
 
     const connection = await mysql.createConnection(dbConfig);
+    
+    // Vérifier si la colonne signature existe dans la table distributions
+    try {
+      const [columns] = await connection.query(`
+        SELECT COLUMN_NAME 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'distributions' AND COLUMN_NAME = 'signature'
+      `, [dbConfig.database]);
+      
+      // Si la colonne signature n'existe pas, l'ajouter
+      if (columns.length === 0) {
+        console.log('Ajout de la colonne signature à la table distributions...');
+        await connection.query(`
+          ALTER TABLE distributions 
+          ADD COLUMN signature LONGTEXT AFTER distribution_date
+        `);
+        console.log('Colonne signature ajoutée avec succès');
+      }
+    } catch (error) {
+      console.error('Erreur lors de la vérification/ajout de la colonne signature:', error);
+      // Continuer malgré l'erreur
+    }
     
     // Vérifier si le site existe déjà
     const [sites] = await connection.query(

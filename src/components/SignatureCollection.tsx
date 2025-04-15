@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   Box, 
   Button, 
@@ -163,6 +163,7 @@ export default function SignatureCollection() {
       });
 
       toast.success('Distribution enregistrée avec succès');
+      
       // Reset form
       setManualFormData({
         id: 0,
@@ -187,34 +188,7 @@ export default function SignatureCollection() {
     }
   };
 
-  // Debounce function to prevent multiple rapid scans
-  const debounce = (func: Function, wait: number) => {
-    let timeout: NodeJS.Timeout;
-    return (...args: any[]) => {
-      clearTimeout(timeout);
-      timeout = setTimeout(() => func(...args), wait);
-    };
-  };
-
-  const handleCameraSwitch = () => {
-    if (cameras.length <= 1) return;
-    const currentIndex = cameras.findIndex(camera => camera.deviceId === selectedCamera);
-    const nextIndex = (currentIndex + 1) % cameras.length;
-    setSelectedCamera(cameras[nextIndex].deviceId);
-  };
-
-  const retryApiCall = async (apiCall: () => Promise<any>, maxRetries: number = MAX_RETRIES): Promise<any> => {
-    for (let i = 0; i < maxRetries; i++) {
-      try {
-        return await apiCall();
-      } catch (error) {
-        if (i === maxRetries - 1) throw error;
-        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
-        setRetryCount(i + 1);
-      }
-    }
-  };
-
+  // Fonction pour gérer le scan du QR code avec debounce
   const handleQrCodeScan = async (data: string | null) => {
     // Éviter les traitements multiples du même QR code ou si un scan est déjà en cours
     if (!data || data === lastScannedData || scanning) return;
@@ -276,11 +250,15 @@ export default function SignatureCollection() {
           // Fermer le scanner et afficher le pad de signature
           // Utiliser requestAnimationFrame pour éviter les problèmes de rendu
           requestAnimationFrame(() => {
+            // Fermer d'abord le scanner pour libérer les ressources de la caméra
             setShowScanner(false);
-            setTimeout(() => setShowSignaturePad(true), 100);
+            
+            // Attendre un peu avant d'afficher le pad de signature
+            setTimeout(() => {
+              setShowSignaturePad(true);
+              toast.success('Bénéficiaire trouvé');
+            }, 300);
           });
-          
-          toast.success('Bénéficiaire trouvé');
         } else {
           throw new Error('Données du bénéficiaire non trouvées dans la réponse de l\'API');
         }
@@ -294,18 +272,63 @@ export default function SignatureCollection() {
       console.error('Unexpected error during QR code processing:', error);
       toast.error('Une erreur inattendue s\'est produite');
     } finally {
-      // Réinitialiser l'état de scanning
-      setScanning(false);
+      // Réinitialiser l'état de scanning après un délai pour éviter les scans multiples trop rapides
+      setTimeout(() => {
+        setScanning(false);
+      }, 1500);
       
-      // Réinitialiser lastScannedData après un délai pour permettre de scanner à nouveau
+      // Réinitialiser lastScannedData après un délai plus long pour permettre de scanner à nouveau le même code
       setTimeout(() => {
         setLastScannedData(null);
         setRetryCount(0);
-      }, 2000);
+      }, 5000);
     }
   };
 
-  const debouncedHandleQrCodeScan = debounce(handleQrCodeScan, 500);
+  // Debounce function to prevent multiple rapid scans
+  const debounce = (func: Function, wait: number, options = {}) => {
+    let timeout: NodeJS.Timeout | null = null;
+    const { leading = false, trailing = true } = options as { leading?: boolean, trailing?: boolean };
+    
+    return (...args: any[]) => {
+      const later = () => {
+        timeout = null;
+        if (trailing) func(...args);
+      };
+      
+      const callNow = leading && !timeout;
+      
+      if (timeout) clearTimeout(timeout);
+      timeout = setTimeout(later, wait);
+      
+      if (callNow) func(...args);
+    };
+  };
+
+  // Utiliser un debounce plus long pour éviter les appels multiples
+  const debouncedHandleQrCodeScan = useCallback(
+    debounce((data: string) => handleQrCodeScan(data), 1000, { leading: true, trailing: false }),
+    [lastScannedData, scanning]
+  );
+
+  const handleCameraSwitch = () => {
+    if (cameras.length <= 1) return;
+    const currentIndex = cameras.findIndex(camera => camera.deviceId === selectedCamera);
+    const nextIndex = (currentIndex + 1) % cameras.length;
+    setSelectedCamera(cameras[nextIndex].deviceId);
+  };
+
+  const retryApiCall = async (apiCall: () => Promise<any>, maxRetries: number = MAX_RETRIES): Promise<any> => {
+    for (let i = 0; i < maxRetries; i++) {
+      try {
+        return await apiCall();
+      } catch (error) {
+        if (i === maxRetries - 1) throw error;
+        await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Exponential backoff
+        setRetryCount(i + 1);
+      }
+    }
+  };
 
   const handleClear = () => {
     if (signaturePad) {
@@ -634,10 +657,17 @@ export default function SignatureCollection() {
                     position: 'relative',
                     overflow: 'hidden'
                   }}
-                  scanDelay={500} // Augmenter le délai entre les scans
+                  scanDelay={1500} // Augmenter davantage le délai entre les scans
                   onResult={(result) => {
-                    if (result && !scanning) { // Ajouter une vérification pour éviter les scans multiples
-                      debouncedHandleQrCodeScan(result.getText());
+                    // Ne traiter le résultat que si nous ne sommes pas déjà en train de scanner
+                    // et si le résultat est différent du dernier résultat traité
+                    if (result && !scanning && result.getText() !== lastScannedData) {
+                      // Utiliser setTimeout pour éviter les problèmes de concurrence
+                      setTimeout(() => {
+                        if (!scanning) {
+                          debouncedHandleQrCodeScan(result.getText());
+                        }
+                      }, 100);
                     }
                   }}
                   ViewFinder={() => (
@@ -651,6 +681,8 @@ export default function SignatureCollection() {
                         transform: 'translate(-50%, -50%)',
                         width: '200px',
                         height: '200px',
+                        zIndex: 10, // Ajouter un z-index pour s'assurer que le viseur est au-dessus
+                        pointerEvents: 'none', // Éviter les interférences avec les événements de clic
                         '&::before, &::after': {
                           content: '""',
                           position: 'absolute',
