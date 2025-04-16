@@ -874,140 +874,225 @@ app.post('/api/import', async (req, res) => {
 
 // Route pour enregistrer une distribution manuellement
 app.post('/api/register-distribution', async (req, res) => {
+  let connection;
   try {
+    console.log('Requête reçue sur /api/register-distribution avec les données:', JSON.stringify(req.body, null, 2));
+    
     const {
+      site_id,
       site_name,
+      site_address,
       household_id,
+      household_name,
       token_number,
       beneficiary_count,
       first_name,
       middle_name,
       last_name,
-      site_address,
       alternate_recipient,
       signature
     } = req.body;
-
-    // Validation des champs requis
-    if (!site_name || !household_id || !token_number || !beneficiary_count || !first_name || !last_name || !signature) {
-      return res.status(400).json({ error: 'Tous les champs obligatoires doivent être remplis' });
+    
+    // Validation des champs obligatoires
+    if (!household_id || !signature) {
+      console.log('Validation échouée: champs obligatoires manquants', {
+        household_id,
+        signature: signature ? 'présent' : 'manquant'
+      });
+      return res.status(400).json({ error: 'Identifiant du ménage et signature sont requis' });
     }
 
-    const connection = await mysql.createConnection(dbConfig);
+    console.log('Validation des champs réussie, connexion à la base de données...');
+    connection = await mysql.createConnection({
+      ...dbConfig,
+      multipleStatements: true // Permettre plusieurs requêtes en une seule connexion
+    });
     
-    // Vérifier si la colonne signature existe dans la table distributions
     try {
-      const [columns] = await connection.query(`
-        SELECT COLUMN_NAME 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'distributions' AND COLUMN_NAME = 'signature'
-      `, [dbConfig.database]);
+      // Démarrer une transaction pour assurer l'intégrité des données
+      await connection.beginTransaction();
       
-      // Si la colonne signature n'existe pas, l'ajouter
-      if (columns.length === 0) {
-        console.log('Ajout de la colonne signature à la table distributions...');
-        await connection.query(`
-          ALTER TABLE distributions 
-          ADD COLUMN signature LONGTEXT AFTER distribution_date
-        `);
-        console.log('Colonne signature ajoutée avec succès');
+      // 1. Vérifier/créer le site si nécessaire
+      let actualSiteId = site_id;
+      if (!actualSiteId && site_name) {
+        const [sites] = await connection.query('SELECT id FROM sites WHERE nom = ?', [site_name]);
+        if (sites.length > 0) {
+          actualSiteId = sites[0].id;
+          console.log('Site existant trouvé:', actualSiteId);
+        } else {
+          // Créer un nouveau site
+          const [result] = await connection.query(
+            'INSERT INTO sites (nom, adresse) VALUES (?, ?)',
+            [site_name, site_address || '']
+          );
+          actualSiteId = result.insertId; // Récupérer l'ID auto-incrémenté
+          console.log('Nouveau site créé:', actualSiteId);
+        }
+      }
+      
+      // 2. Vérifier/créer le ménage (household)
+      let actualHouseholdId;
+      const [households] = await connection.query(
+        'SELECT id FROM households WHERE household_id = ? OR token_number = ?',
+        [household_id, token_number || household_id]
+      );
+      
+      if (households.length > 0) {
+        actualHouseholdId = households[0].id;
+        console.log('Ménage existant trouvé:', actualHouseholdId);
+        // Mettre à jour les informations du ménage si nécessaire
+        await connection.query(
+          'UPDATE households SET household_name = ?, site_id = ?, beneficiary_count = ?, first_name = ?, middle_name = ?, last_name = ?, site_address = ?, alternate_recipient = ? WHERE id = ?',
+          [
+            household_name || household_id,
+            actualSiteId,
+            beneficiary_count || 1,
+            first_name || '',
+            middle_name || null,
+            last_name || '',
+            site_address || '',
+            alternate_recipient || null,
+            actualHouseholdId
+          ]
+        );
+      } else {
+        // Créer un nouveau ménage
+        const householdUuid = uuidv4();
+        await connection.query(
+          'INSERT INTO households (id, household_id, household_name, token_number, site_id, beneficiary_count, first_name, middle_name, last_name, site_address, alternate_recipient, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            householdUuid,
+            household_id,
+            household_name || household_id,
+            token_number || household_id,
+            actualSiteId,
+            beneficiary_count || 1,
+            first_name || '',
+            middle_name || null,
+            last_name || '',
+            site_address || '',
+            alternate_recipient || null,
+            new Date()
+          ]
+        );
+        actualHouseholdId = householdUuid;
+        console.log('Nouveau ménage créé:', actualHouseholdId);
+      }
+      
+      // 3. Vérifier/créer le bénéficiaire principal (recipient)
+      let recipientId;
+      const [recipients] = await connection.query(
+        'SELECT id FROM recipients WHERE household_id = ?',
+        [actualHouseholdId]
+      );
+      
+      if (recipients.length > 0) {
+        recipientId = recipients[0].id;
+        console.log('Bénéficiaire principal existant trouvé, ID:', recipientId);
+        
+        // Mettre à jour les informations du bénéficiaire
+        await connection.query(
+          'UPDATE recipients SET first_name = ?, middle_name = ?, last_name = ? WHERE id = ?',
+          [first_name || '', middle_name || null, last_name || '', recipientId]
+        );
+      } else {
+        // Créer un nouveau recipient avec un ID numérique (int)
+        const [result] = await connection.query(
+          'INSERT INTO recipients (household_id, first_name, middle_name, last_name, genre, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)',
+          [
+            actualHouseholdId,
+            first_name || '',
+            middle_name || null,
+            last_name || '',
+            'M', // Genre par défaut
+            new Date(),
+            new Date()
+          ]
+        );
+        recipientId = result.insertId; // Récupérer l'ID auto-incrémenté
+        console.log('Nouveau recipient créé avec ID:', recipientId);
+      }
+      
+      // 4. Créer la signature
+      let signatureId;
+      console.log('Enregistrement de la signature');
+      try {
+        const [result] = await connection.query(
+          'INSERT INTO signatures (household_id, recipient_id, signature_data, created_at) VALUES (?, ?, ?, ?)',
+          [actualHouseholdId, recipientId, signature, new Date()]
+        );
+        signatureId = result.insertId; // Récupérer l'ID auto-incrémenté
+        console.log('Signature enregistrée avec ID:', signatureId);
+      } catch (error) {
+        console.log('Erreur lors de l\'enregistrement de la signature:', error.message);
+        throw new Error('Impossible d\'enregistrer la signature: ' + error.message);
+      }
+      
+      // 5. Créer la distribution
+      const distributionId = uuidv4();
+      const now = new Date();
+      console.log('Création d\'une nouvelle distribution avec ID:', distributionId);
+      
+      try {
+        await connection.query(
+          'INSERT INTO distributions (id, household_id, recipient_id, signature_id, distribution_date, signature, status, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [
+            distributionId,
+            actualHouseholdId,
+            recipientId,
+            signatureId,
+            now,
+            signature,
+            'pending',
+            now,
+            now
+          ]
+        );
+        
+        console.log('Distribution enregistrée avec succès, ID:', distributionId);
+        
+        // Valider la transaction
+        await connection.commit();
+        
+        // Répondre avec succès
+        res.status(201).json({
+          success: true,
+          message: 'Distribution enregistrée avec succès',
+          data: {
+            distribution_id: distributionId,
+            household_id: actualHouseholdId,
+            distribution_date: now
+          }
+        });
+      } catch (error) {
+        // Annuler la transaction en cas d'erreur
+        await connection.rollback();
+        console.error('Erreur détaillée lors de l\'enregistrement de la distribution:', error);
+        console.error('Message d\'erreur:', error.message);
+        console.error('Code d\'erreur SQL:', error.code);
+        console.error('Numéro d\'erreur SQL:', error.errno);
+        console.error('Requête SQL ayant échoué:', error.sql);
+        
+        throw error; // Propager l'erreur pour être capturée par le bloc catch externe
       }
     } catch (error) {
-      console.error('Erreur lors de la vérification/ajout de la colonne signature:', error);
-      // Continuer malgré l'erreur
-    }
-    
-    // Vérifier si le site existe déjà
-    const [sites] = await connection.query(
-      'SELECT id FROM sites WHERE nom = ?',
-      [site_name]
-    );
-    
-    let siteId;
-    if (sites.length > 0) {
-      // Utiliser le site existant
-      siteId = sites[0].id;
-    } else {
-      // Créer un nouveau site
-      siteId = uuidv4();
-      await connection.query(
-        'INSERT INTO sites (id, nom, adresse) VALUES (?, ?, ?)',
-        [siteId, site_name, site_address || '']
-      );
-    }
-    
-    // Vérifier si le ménage existe déjà
-    const [households] = await connection.query(
-      'SELECT id FROM households WHERE token_number = ?',
-      [token_number]
-    );
-    
-    let householdId;
-    if (households.length > 0) {
-      // Utiliser le ménage existant
-      householdId = households[0].id;
-      
-      // Mettre à jour les informations du ménage si nécessaire
-      await connection.query(
-        'UPDATE households SET household_name = ?, site_id = ?, beneficiary_count = ?, first_name = ?, middle_name = ?, last_name = ?, site_address = ?, alternate_recipient = ? WHERE id = ?',
-        [
-          household_id, 
-          siteId, 
-          beneficiary_count, 
-          first_name, 
-          middle_name || null, 
-          last_name, 
-          site_address || '', 
-          alternate_recipient || null, 
-          householdId
-        ]
-      );
-    } else {
-      // Créer un nouveau ménage
-      householdId = uuidv4();
-      await connection.query(
-        'INSERT INTO households (id, household_id, household_name, token_number, site_id, beneficiary_count, first_name, middle_name, last_name, site_address, alternate_recipient) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [
-          householdId, 
-          household_id, 
-          household_id, 
-          token_number, 
-          siteId, 
-          beneficiary_count, 
-          first_name, 
-          middle_name || null, 
-          last_name, 
-          site_address || '', 
-          alternate_recipient || null
-        ]
-      );
-    }
-    
-    // Enregistrer la distribution
-    const distributionId = uuidv4();
-    const now = new Date();
-    
-    await connection.query(
-      'INSERT INTO distributions (id, household_id, distribution_date, signature, created_at) VALUES (?, ?, ?, ?, ?)',
-      [distributionId, householdId, now, signature, now]
-    );
-    
-    await connection.end();
-    
-    res.status(201).json({
-      success: true,
-      message: 'Distribution enregistrée avec succès',
-      data: {
-        distribution_id: distributionId,
-        household_id: householdId,
-        distribution_date: now
+      // Annuler la transaction en cas d'erreur
+      await connection.rollback();
+      console.error('Erreur lors de l\'enregistrement de la distribution:', error);
+      res.status(500).json({
+        success: false,
+        error: 'Erreur lors de l\'enregistrement de la distribution: ' + error.message
+      });
+    } finally {
+      if (connection) {
+        await connection.end();
       }
-    });
+    }
   } catch (error) {
-    console.error('Erreur lors de l\'enregistrement de la distribution:', error);
-    res.status(500).json({ 
+    console.error('Erreur globale:', error);
+    res.status(500).json({
       success: false,
-      error: 'Erreur lors de l\'enregistrement de la distribution: ' + error.message 
+      error: 'Erreur lors de l\'enregistrement de la distribution: ' + error.message
     });
   }
 });
