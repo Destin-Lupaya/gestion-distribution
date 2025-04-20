@@ -9,6 +9,7 @@
     "allowSyntheticDefaultImports": true,
     "isolatedModules": true,
     "noEmit": false,
+    "allowImportingTsExtensions": false,
     "resolveJsonModule": true,
     "skipLibCheck": true,
     "sourceMap": true,
@@ -16,6 +17,6 @@
     "forceConsistentCasingInFileNames": true,
     "lib": ["ES2020", "DOM"]
   },
-  "include": ["src/server.ts", "src/routes", "src/lib", "src/services", "src/types", "src/utils"],
+  "include": ["src/routes/**/*.ts", "src/lib/**/*.ts", "src/services/**/*.ts", "src/types/**/*.ts", "src/utils/**/*.ts"],
   "exclude": ["node_modules", "**/*.spec.ts"]
 }

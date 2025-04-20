@@ -8,6 +8,8 @@ import QRTester from './components/QRTester';
 import TestParser from './components/TestParser';
 import DataGridView from './components/DataGrid';
 import Layout from './components/Layout';
+import NutritionRegistration from './components/NutritionRegistration';
+import NutritionDistribution from './components/NutritionDistribution';
 import { AnimatePresence } from 'framer-motion';
 import { Container, ThemeProvider } from '@mui/material';
 import { theme } from './theme';
@@ -46,6 +48,14 @@ const router = createBrowserRouter(
         {
           path: 'data',
           element: <DataGridView />
+        },
+        {
+          path: 'nutrition-registration',
+          element: <NutritionRegistration />
+        },
+        {
+          path: 'nutrition-distribution',
+          element: <NutritionDistribution />
         }
       ]
     }

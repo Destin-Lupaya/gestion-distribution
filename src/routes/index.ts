@@ -2,8 +2,12 @@ import { Request, Response, Router } from 'express';
 import mysql from 'mysql2/promise';
 import { v4 as uuidv4 } from 'uuid';
 import { dbOperations } from '../lib/db';
+import nutritionRoutes from './nutritionRoutes';
 
 const router = Router();
+
+// Mount nutrition routes
+router.use('/nutrition', nutritionRoutes);
 
 // Health check endpoint
 router.get('/health', async (_req: Request, res: Response) => {

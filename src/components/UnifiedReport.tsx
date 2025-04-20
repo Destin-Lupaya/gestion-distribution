@@ -194,15 +194,34 @@ const UnifiedReport: React.FC = () => {
           break;
       }
 
+      console.log(`Chargement des données depuis ${endpoint} avec paramètres:`, Object.fromEntries(params));
+      
       const response = await fetch(`http://localhost:3001${endpoint}?${params}`);
+      
       if (!response.ok) {
-        throw new Error('Erreur lors de la récupération des données');
+        const errorText = await response.text();
+        console.error(`Erreur HTTP ${response.status}: ${errorText}`);
+        throw new Error(`Erreur lors de la récupération des données (${response.status})`);
       }
+      
       const data = await response.json();
+      console.log(`Données reçues:`, data);
+      
+      if (!Array.isArray(data)) {
+        console.error('Format de données invalide, tableau attendu:', data);
+        throw new Error('Format de données invalide');
+      }
+      
+      if (data.length === 0) {
+        console.log('Aucune donnée trouvée pour les critères sélectionnés');
+        // Continuer avec un tableau vide plutôt que de lancer une erreur
+      }
+      
       setReportData(data);
       updateCharts(data);
     } catch (error) {
-      setError('Erreur lors du chargement des données du rapport');
+      console.error('Erreur complète:', error);
+      setError(`Erreur lors du chargement des données du rapport: ${error.message}`);
     } finally {
       setLoading(false);
     }

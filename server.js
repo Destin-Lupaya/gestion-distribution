@@ -4,6 +4,10 @@ const cors = require('cors');
 const mysql = require('mysql2/promise');
 const { v4: uuidv4 } = require('uuid');
 require('dotenv').config();
+const path = require('path');
+
+// Import routes
+const apiRoutes = require('./dist/routes/index');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -83,6 +87,9 @@ app.use((req, res, next) => {
   
   next();
 });
+
+// Mount API routes
+app.use('/api', apiRoutes);
 
 // Test database connection
 async function testDbConnection() {
@@ -697,6 +704,75 @@ app.get('/api/reports/daily', async (req, res) => {
   }
 });
 
+// Endpoint pour les rapports par groupe d'âge
+app.get('/api/reports/age', async (req, res) => {
+  try {
+    console.log('Requête reçue sur /api/reports/age avec les paramètres:', req.query);
+    
+    const { startDate, endDate, siteId } = req.query;
+    let query = `
+      SELECT 
+        s.nom as site_name,
+        s.adresse as location,
+        COUNT(DISTINCT h.id) as household_count,
+        SUM(CASE WHEN r.age < 15 THEN 1 ELSE 0 END) as children_0_14,
+        SUM(CASE WHEN r.age >= 15 AND r.age <= 24 THEN 1 ELSE 0 END) as youth_15_24,
+        SUM(CASE WHEN r.age >= 25 AND r.age <= 44 THEN 1 ELSE 0 END) as adults_25_44,
+        SUM(CASE WHEN r.age >= 45 AND r.age <= 64 THEN 1 ELSE 0 END) as adults_45_64,
+        SUM(CASE WHEN r.age >= 65 THEN 1 ELSE 0 END) as elderly_65_plus
+      FROM distributions d
+      JOIN households h ON d.household_id = h.id
+      JOIN sites s ON h.site_id = s.id
+      LEFT JOIN recipients r ON r.household_id = h.id
+      WHERE 1=1
+    `;
+    
+    const params = [];
+    if (startDate) {
+      query += ` AND DATE(d.distribution_date) >= ?`;
+      params.push(startDate);
+    }
+    if (endDate) {
+      query += ` AND DATE(d.distribution_date) <= ?`;
+      params.push(endDate);
+    }
+    if (siteId) {
+      query += ` AND s.id = ?`;
+      params.push(siteId);
+    }
+    
+    query += ` GROUP BY s.nom, s.adresse ORDER BY s.nom`;
+    
+    console.log('Exécution de la requête SQL:', query.replace(/\s+/g, ' '));
+    console.log('Paramètres:', params);
+    
+    const connection = await mysql.createConnection(dbConfig);
+    
+    try {
+      const [rows] = await connection.query(query, params);
+      console.log(`Rapport par âge: ${rows.length} résultats trouvés`);
+      
+      // Si aucun résultat, renvoyer un tableau vide plutôt qu'une erreur
+      if (rows.length === 0) {
+        console.log('Aucun résultat trouvé pour les critères spécifiés');
+      } else {
+        // Log du premier résultat pour vérifier la structure
+        console.log('Premier résultat:', rows[0]);
+      }
+      
+      res.json(rows);
+    } catch (dbError) {
+      console.error('Erreur SQL:', dbError);
+      throw dbError;
+    } finally {
+      await connection.end();
+    }
+  } catch (error) {
+    console.error('Error fetching age report:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
 // Endpoint simple pour vérifier les données dans la table distributions
 app.get('/api/distributions/check', async (req, res) => {
   try {
@@ -1094,6 +1170,382 @@ app.post('/api/register-distribution', async (req, res) => {
       success: false,
       error: 'Erreur lors de l\'enregistrement de la distribution: ' + error.message
     });
+  }
+});
+
+// Routes pour la nutrition
+// Récupérer le rapport de nutrition
+app.get('/api/nutrition/report', async (req, res) => {
+  try {
+    console.log('Récupération du rapport de nutrition');
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Requête pour obtenir les données du rapport de nutrition
+    const [rows] = await connection.execute(`
+      SELECT 
+        nb.numero_enregistrement,
+        nb.nom_enfant,
+        nb.nom_mere,
+        nb.age_mois,
+        nb.sexe,
+        nb.province,
+        nb.territoire,
+        nb.partenaire,
+        nb.village,
+        nb.site_cs,
+        nr.numero_carte,
+        nr.statut,
+        COUNT(nd.id) as nombre_distributions,
+        MAX(nd.date_distribution) as derniere_distribution
+      FROM nutrition_beneficiaires nb
+      LEFT JOIN nutrition_rations nr ON nb.id = nr.beneficiaire_id
+      LEFT JOIN nutrition_distributions nd ON nr.id = nd.ration_id
+      GROUP BY nb.id, nr.id
+      ORDER BY nb.nom_enfant
+    `);
+    
+    await connection.end();
+    
+    // Renvoyer les données
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération du rapport de nutrition:', error);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Récupérer un bénéficiaire de nutrition par son numéro d'enregistrement
+app.get('/api/nutrition/beneficiaires/:numeroEnregistrement', async (req, res) => {
+  try {
+    const { numeroEnregistrement } = req.params;
+    console.log(`Recherche du bénéficiaire de nutrition avec le numéro d'enregistrement: ${numeroEnregistrement}`);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Requête pour obtenir le bénéficiaire et ses informations de ration
+    const [rows] = await connection.execute(
+      `SELECT 
+        nb.*, 
+        nr.id as ration_id, 
+        nr.numero_carte as numero_ration, 
+        nr.date_debut, 
+        nr.date_fin, 
+        nr.statut
+      FROM nutrition_beneficiaires nb
+      LEFT JOIN nutrition_rations nr ON nb.id = nr.beneficiaire_id
+      WHERE nb.numero_enregistrement = ?`,
+      [numeroEnregistrement]
+    );
+    
+    await connection.end();
+    
+    if (rows.length > 0) {
+      // Formater la réponse pour correspondre à ce que le frontend attend
+      const beneficiary = rows[0];
+      
+      // Extraire les données de ration
+      const ration = {
+        id: beneficiary.ration_id,
+        numero_ration: beneficiary.numero_ration,
+        date_debut: beneficiary.date_debut,
+        date_fin: beneficiary.date_fin,
+        statut: beneficiary.statut
+      };
+      
+      // Supprimer les champs de ration de l'objet principal
+      delete beneficiary.ration_id;
+      delete beneficiary.numero_ration;
+      delete beneficiary.date_debut;
+      delete beneficiary.date_fin;
+      delete beneficiary.statut;
+      
+      // Ajouter les rations comme un tableau
+      beneficiary.nutrition_rations = [ration];
+      
+      res.status(200).json(beneficiary);
+    } else {
+      res.status(404).json({ error: 'Bénéficiaire non trouvé' });
+    }
+  } catch (error) {
+    console.error('Erreur lors de la recherche du bénéficiaire de nutrition:', error);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Récupérer les distributions de nutrition pour une ration donnée
+app.get('/api/nutrition/distributions/:rationId', async (req, res) => {
+  try {
+    const { rationId } = req.params;
+    console.log(`Récupération des distributions de nutrition pour la ration: ${rationId}`);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Requête pour obtenir les distributions
+    const [rows] = await connection.execute(
+      `SELECT * FROM nutrition_distributions WHERE ration_id = ? ORDER BY date_distribution`,
+      [rationId]
+    );
+    
+    await connection.end();
+    
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des distributions de nutrition:', error);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
+// Enregistrer un nouveau bénéficiaire de nutrition
+app.post('/api/nutrition/register-beneficiary', async (req, res) => {
+  try {
+    const {
+      numero_enregistrement,
+      nom_enfant,
+      nom_mere,
+      age_mois,
+      sexe,
+      province,
+      territoire,
+      partenaire,
+      village,
+      site_cs
+    } = req.body;
+    
+    console.log('Enregistrement d\'un nouveau bénéficiaire de nutrition:', req.body);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Démarrer une transaction
+    await connection.beginTransaction();
+    
+    try {
+      // Insérer le bénéficiaire
+      const beneficiaireId = uuidv4();
+      await connection.execute(
+        `INSERT INTO nutrition_beneficiaires (
+          id,
+          numero_enregistrement,
+          nom_enfant,
+          nom_mere,
+          age_mois,
+          sexe,
+          province,
+          territoire,
+          partenaire,
+          village,
+          site_cs,
+          date_enregistrement
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [
+          beneficiaireId,
+          numero_enregistrement,
+          nom_enfant,
+          nom_mere,
+          age_mois,
+          sexe,
+          province,
+          territoire,
+          partenaire,
+          village,
+          site_cs
+        ]
+      );
+      
+      // Calculer la date de fin (6 mois après l'enregistrement)
+      const dateDebut = new Date();
+      const dateFin = new Date();
+      dateFin.setMonth(dateFin.getMonth() + 6);
+      
+      // Générer un numéro de ration
+      const numeroRation = `R-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+      
+      // Insérer la ration
+      const rationId = uuidv4();
+      await connection.execute(
+        `INSERT INTO nutrition_rations (
+          id,
+          beneficiaire_id,
+          numero_carte,
+          date_debut,
+          date_fin,
+          statut
+        ) VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          rationId,
+          beneficiaireId,
+          numeroRation,
+          dateDebut,
+          dateFin,
+          'ACTIF'
+        ]
+      );
+      
+      // Valider la transaction
+      await connection.commit();
+      
+      // Récupérer les données complètes du bénéficiaire
+      const [rows] = await connection.execute(
+        `SELECT 
+          nb.*, 
+          nr.id as ration_id, 
+          nr.numero_carte as numero_ration, 
+          nr.date_debut, 
+          nr.date_fin, 
+          nr.statut
+        FROM nutrition_beneficiaires nb
+        LEFT JOIN nutrition_rations nr ON nb.id = nr.beneficiaire_id
+        WHERE nb.id = ?`,
+        [beneficiaireId]
+      );
+      
+      await connection.end();
+      
+      if (rows.length > 0) {
+        // Formater la réponse
+        const beneficiary = rows[0];
+        
+        // Extraire les données de ration
+        const ration = {
+          id: beneficiary.ration_id,
+          numero_ration: beneficiary.numero_ration,
+          date_debut: beneficiary.date_debut,
+          date_fin: beneficiary.date_fin,
+          statut: beneficiary.statut
+        };
+        
+        // Supprimer les champs de ration de l'objet principal
+        delete beneficiary.ration_id;
+        delete beneficiary.numero_ration;
+        delete beneficiary.date_debut;
+        delete beneficiary.date_fin;
+        delete beneficiary.statut;
+        
+        // Ajouter les rations comme un tableau
+        beneficiary.nutrition_rations = [ration];
+        
+        res.status(201).json({
+          success: true,
+          message: 'Bénéficiaire de nutrition enregistré avec succès',
+          data: beneficiary
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: 'Erreur lors de la récupération des données du bénéficiaire après enregistrement'
+        });
+      }
+    } catch (error) {
+      // Annuler la transaction en cas d'erreur
+      await connection.rollback();
+      await connection.end();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'enregistrement du bénéficiaire de nutrition:', error);
+    res.status(500).json({
+      success: false,
+      error: String(error)
+    });
+  }
+});
+
+// Enregistrer une distribution de nutrition
+app.post('/api/nutrition/distributions', async (req, res) => {
+  try {
+    const {
+      ration_id,
+      date_distribution,
+      cycle,
+      quantite,
+      pb,
+      observations
+    } = req.body;
+    
+    console.log('Enregistrement d\'une nouvelle distribution de nutrition:', req.body);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Démarrer une transaction
+    await connection.beginTransaction();
+    
+    try {
+      // Insérer la distribution
+      const distributionId = uuidv4();
+      await connection.execute(
+        `INSERT INTO nutrition_distributions (
+          id,
+          ration_id,
+          date_distribution,
+          cycle,
+          quantite,
+          pb,
+          observations
+        ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        [
+          distributionId,
+          ration_id,
+          date_distribution,
+          cycle,
+          quantite,
+          pb,
+          observations
+        ]
+      );
+      
+      // Valider la transaction
+      await connection.commit();
+      
+      // Récupérer les données de la distribution
+      const [rows] = await connection.execute(
+        `SELECT * FROM nutrition_distributions WHERE id = ?`,
+        [distributionId]
+      );
+      
+      await connection.end();
+      
+      if (rows.length > 0) {
+        res.status(201).json({
+          success: true,
+          message: 'Distribution de nutrition enregistrée avec succès',
+          data: rows[0]
+        });
+      } else {
+        res.status(500).json({
+          success: false,
+          error: 'Erreur lors de la récupération des données de la distribution après enregistrement'
+        });
+      }
+    } catch (error) {
+      // Annuler la transaction en cas d'erreur
+      await connection.rollback();
+      await connection.end();
+      throw error;
+    }
+  } catch (error) {
+    console.error('Erreur lors de l\'enregistrement de la distribution de nutrition:', error);
+    res.status(500).json({
+      success: false,
+      error: String(error)
+    });
+  }
+});
+
+// Sites endpoints
+app.get('/api/sites', async (_req, res) => {
+  try {
+    const connection = await mysql.createConnection(dbConfig);
+    const [rows] = await connection.query('SELECT * FROM sites');
+    await connection.end();
+    res.json(rows);
+  } catch (error) {
+    console.error('Error fetching sites:', error);
+    res.status(500).json({ error: 'Failed to fetch sites' });
   }
 });
 
