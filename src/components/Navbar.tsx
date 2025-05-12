@@ -8,6 +8,7 @@ import AssessmentIcon from '@mui/icons-material/Assessment';
 import GridViewIcon from '@mui/icons-material/GridView';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
 import LocalDiningIcon from '@mui/icons-material/LocalDining';
+import PendingActionsIcon from '@mui/icons-material/PendingActions';
 
 function Navbar() {
   const location = useLocation();
@@ -82,6 +83,7 @@ function Navbar() {
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <NavButton to="/" icon={<ListAltIcon />} label="Liste" />
             <NavButton to="/signatures" icon={<DrawIcon />} label="Signatures" />
+            <NavButton to="/pending-distributions" icon={<PendingActionsIcon />} label="Distributions en attente" />
             <NavButton to="/rapport" icon={<AssessmentIcon />} label="Rapport Global" />
             <NavButton to="/data" icon={<GridViewIcon />} label="Données" />
             <NavButton to="/nutrition-registration" icon={<RestaurantIcon />} label="Enregistrement Nutrition" />

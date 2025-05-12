@@ -10,6 +10,7 @@ import DataGridView from './components/DataGrid';
 import Layout from './components/Layout';
 import NutritionRegistration from './components/NutritionRegistration';
 import NutritionDistribution from './components/NutritionDistribution';
+import PendingDistributions from './components/PendingDistributions';
 import { AnimatePresence } from 'framer-motion';
 import { Container, ThemeProvider } from '@mui/material';
 import { theme } from './theme';
@@ -56,6 +57,10 @@ const router = createBrowserRouter(
         {
           path: 'nutrition-distribution',
           element: <NutritionDistribution />
+        },
+        {
+          path: 'pending-distributions',
+          element: <PendingDistributions />
         }
       ]
     }

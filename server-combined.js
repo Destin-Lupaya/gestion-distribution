@@ -32,9 +32,9 @@ const PORT = process.env.PORT || 3001;
 
 // Configuration CORS plus permissive
 app.use(cors({
-  origin: ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://10.243.10.228:5173', '*'],
+  origin: '*', // Allow all origins
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Origin', 'Accept'],
   credentials: true
 }));
 
@@ -47,6 +47,7 @@ app.use((req, res, next) => {
   res.header('Access-Control-Allow-Origin', '*');
   res.header('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
   res.header('Access-Control-Allow-Headers', 'Origin, X-Requested-With, Content-Type, Accept, Authorization');
+  res.header('Access-Control-Allow-Credentials', 'true');
   
   // Gérer les requêtes preflight
   if (req.method === 'OPTIONS') {
@@ -826,6 +827,135 @@ app.post('/api/register-distribution', async (req, res) => {
       console.log('Libération de la connexion à la base de données');
       connection.release();
     }
+  }
+});
+
+// Endpoint pour récupérer les distributions en attente
+app.get('/api/distributions/pending', async (req, res) => {
+  let connection;
+  try {
+    console.log('Récupération des distributions en attente');
+    connection = await pool.getConnection();
+    
+    const [rows] = await connection.query(
+      'SELECT d.*, r.first_name, r.middle_name, r.last_name, r.site_name, r.household_name, r.token_number, r.beneficiary_count ' +
+      'FROM distributions d ' +
+      'JOIN recipients r ON d.recipient_id = r.id ' +
+      'WHERE d.status = "pending" ' +
+      'ORDER BY d.created_at DESC'
+    );
+    
+    console.log(`${rows.length} distributions en attente trouvées`);
+    
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des distributions en attente:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de la récupération des distributions en attente',
+      error: error.message
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Endpoint pour approuver une distribution
+app.put('/api/distributions/:id/approve', async (req, res) => {
+  let connection;
+  try {
+    const { id } = req.params;
+    console.log(`Approbation de la distribution ${id}`);
+    
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    
+    // Vérifier si la distribution existe et est en attente
+    const [distributions] = await connection.query(
+      'SELECT * FROM distributions WHERE id = ? AND status = "pending"',
+      [id]
+    );
+    
+    if (distributions.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Distribution non trouvée ou déjà traitée'
+      });
+    }
+    
+    // Mettre à jour le statut de la distribution
+    await connection.query(
+      'UPDATE distributions SET status = "completed", updated_at = NOW() WHERE id = ?',
+      [id]
+    );
+    
+    await connection.commit();
+    
+    res.json({
+      success: true,
+      message: 'Distribution approuvée avec succès'
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Erreur lors de l\'approbation de la distribution:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de l\'approbation de la distribution',
+      error: error.message
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Endpoint pour annuler une distribution
+app.put('/api/distributions/:id/cancel', async (req, res) => {
+  let connection;
+  try {
+    const { id } = req.params;
+    console.log(`Annulation de la distribution ${id}`);
+    
+    connection = await pool.getConnection();
+    await connection.beginTransaction();
+    
+    // Vérifier si la distribution existe et est en attente
+    const [distributions] = await connection.query(
+      'SELECT * FROM distributions WHERE id = ? AND status = "pending"',
+      [id]
+    );
+    
+    if (distributions.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'Distribution non trouvée ou déjà traitée'
+      });
+    }
+    
+    // Mettre à jour le statut de la distribution
+    await connection.query(
+      'UPDATE distributions SET status = "cancelled", updated_at = NOW() WHERE id = ?',
+      [id]
+    );
+    
+    await connection.commit();
+    
+    res.json({
+      success: true,
+      message: 'Distribution annulée avec succès'
+    });
+  } catch (error) {
+    if (connection) await connection.rollback();
+    console.error('Erreur lors de l\'annulation de la distribution:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Erreur lors de l\'annulation de la distribution',
+      error: error.message
+    });
+  } finally {
+    if (connection) connection.release();
   }
 });
 

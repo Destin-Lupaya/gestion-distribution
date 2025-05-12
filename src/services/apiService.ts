@@ -137,6 +137,32 @@ class ApiService {
   async getDistributions() {
     return this.get(API_CONFIG.ENDPOINTS.GET_DISTRIBUTIONS);
   }
+
+  /**
+   * Méthode pour approuver une distribution
+   * @param distributionId - ID de la distribution à approuver
+   * @returns Résultat de l'approbation
+   */
+  async approveDistribution(distributionId: string) {
+    return this.put(`/api/distributions/${distributionId}/approve`, {});
+  }
+
+  /**
+   * Méthode pour annuler une distribution
+   * @param distributionId - ID de la distribution à annuler
+   * @returns Résultat de l'annulation
+   */
+  async cancelDistribution(distributionId: string) {
+    return this.put(`/api/distributions/${distributionId}/cancel`, {});
+  }
+
+  /**
+   * Méthode pour récupérer les distributions en attente
+   * @returns Liste des distributions en attente
+   */
+  async getPendingDistributions() {
+    return this.get('/api/distributions/pending');
+  }
 }
 
 // Exporter une instance singleton du service
