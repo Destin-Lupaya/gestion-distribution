@@ -3,34 +3,34 @@ import { createTheme } from '@mui/material/styles';
 export const theme = createTheme({
   palette: {
     primary: {
-      main: '#2563eb',
-      light: '#60a5fa',
-      dark: '#1d4ed8',
+      main: '#0088ce', // Bleu WFP/Partner Connect
+      light: '#4db8ff',
+      dark: '#00599e',
       contrastText: '#ffffff',
     },
     secondary: {
-      main: '#4f46e5',
-      light: '#818cf8',
-      dark: '#4338ca',
+      main: '#00263d', // Bleu foncé de Partner Connect
+      light: '#2c4658',
+      dark: '#001a2c',
       contrastText: '#ffffff',
     },
     background: {
-      default: '#f8fafc',
+      default: '#f5f7fa',
       paper: '#ffffff',
     },
     error: {
-      main: '#ef4444',
-      light: '#fca5a5',
-      dark: '#dc2626',
+      main: '#e53935',
+      light: '#ff6f60',
+      dark: '#ab000d',
     },
     success: {
-      main: '#22c55e',
-      light: '#86efac',
-      dark: '#16a34a',
+      main: '#2e7d32',
+      light: '#60ad5e',
+      dark: '#005005',
     },
     text: {
-      primary: '#1e293b',
-      secondary: '#64748b',
+      primary: '#00263d',
+      secondary: '#546e7a',
     },
   },
   typography: {

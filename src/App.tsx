@@ -1,4 +1,4 @@
-import React from 'react';
+// React est utilisé implicitement pour les composants JSX
 import { RouterProvider, createBrowserRouter } from 'react-router-dom';
 import ImportList from './components/ImportList';
 import ManualRegistration from './components/ManualRegistration';
@@ -11,8 +11,9 @@ import Layout from './components/Layout';
 import NutritionRegistration from './components/NutritionRegistration';
 import NutritionDistribution from './components/NutritionDistribution';
 import PendingDistributions from './components/PendingDistributions';
+import HomePage from './components/HomePage';
 import { AnimatePresence } from 'framer-motion';
-import { Container, ThemeProvider } from '@mui/material';
+import { ThemeProvider, CssBaseline, Box } from '@mui/material';
 import { theme } from './theme';
 
 // Create router with v7 features enabled
@@ -24,6 +25,10 @@ const router = createBrowserRouter(
       children: [
         {
           index: true,
+          element: <HomePage />
+        },
+        {
+          path: 'import',
           element: <ImportList />
         },
         {
@@ -48,7 +53,7 @@ const router = createBrowserRouter(
         },
         {
           path: 'data',
-          element: <DataGridView />
+          element: <DataGridView rows={[]} columns={[]} />
         },
         {
           path: 'nutrition-registration',
@@ -64,23 +69,18 @@ const router = createBrowserRouter(
         }
       ]
     }
-  ],
-  {
-    future: {
-      v7_startTransition: true,
-      v7_relativeSplatPath: true
-    }
-  }
+  ]
 );
 
 function App() {
   return (
     <ThemeProvider theme={theme}>
-      <Container maxWidth="lg">
+      <CssBaseline />
+      <Box sx={{ bgcolor: 'background.default', minHeight: '100vh' }}>
         <AnimatePresence mode="wait">
           <RouterProvider router={router} />
         </AnimatePresence>
-      </Container>
+      </Box>
     </ThemeProvider>
   );
 }
