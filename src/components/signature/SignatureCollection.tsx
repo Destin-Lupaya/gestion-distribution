@@ -15,9 +15,12 @@ import {
   InputLabel,
   Select,
   MenuItem,
-  SelectChangeEvent
+  SelectChangeEvent,
+  Tabs,
+  Tab
 } from '@mui/material';
 import { QrReader } from 'react-qr-reader';
+import BeneficiaireSearch from '../beneficiaire/BeneficiaireSearch';
 
 interface SignatureCollectionProps {
   onComplete: (result: {
@@ -48,6 +51,7 @@ export const SignatureCollection: React.FC<SignatureCollectionProps> = ({ onComp
   const [selectedItems, setSelectedItems] = useState<DistributionItem[]>([]);
   const [availableItems, setAvailableItems] = useState<DistributionItem[]>([]);
   const [step, setStep] = useState<'scan' | 'items' | 'signature'>('scan');
+  const [tabValue, setTabValue] = useState<'scanner' | 'manuel'>('scanner');
 
   // Charger les articles disponibles
   React.useEffect(() => {
@@ -157,25 +161,72 @@ export const SignatureCollection: React.FC<SignatureCollectionProps> = ({ onComp
     }
   };
 
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: 'scanner' | 'manuel') => {
+    setTabValue(newValue);
+  };
+
+  const handleSelectBeneficiaire = async (beneficiaire: any) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Simuler les données du QR code à partir des informations du bénéficiaire
+      const qrData = {
+        est_valide: true,
+        household_id: beneficiaire.household_id,
+        nom_menage: beneficiaire.nom_du_menage,
+        beneficiaire_principal: beneficiaire.nom_complet,
+        token_number: beneficiaire.token_number,
+        site_id: beneficiaire.site_id,
+        site_nom: beneficiaire.site_de_distribution
+      };
+
+      setScanData(qrData);
+      setStep('items');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Erreur inconnue');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const renderStep = () => {
     switch (step) {
       case 'scan':
         return (
           <Paper sx={{ p: 3 }}>
             <Typography variant="h6" gutterBottom>
-              Scanner le QR Code du Bénéficiaire
+              Collection des Signatures
             </Typography>
-            <Box sx={{ width: '100%', maxWidth: 500, margin: '0 auto' }}>
-              <QrReader
-                constraints={{ facingMode: 'environment' }}
-                onResult={(result) => {
-                  if (result) {
-                    handleScan(result.getText());
-                  }
-                }}
-                scanDelay={500}
-              />
+            
+            <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
+              <Tabs 
+                value={tabValue} 
+                onChange={handleTabChange}
+                variant="fullWidth"
+                indicatorColor="primary"
+                textColor="primary"
+              >
+                <Tab label="Scanner QR Code" value="scanner" />
+                <Tab label="Enregistrement Manuel" value="manuel" />
+              </Tabs>
             </Box>
+
+            {tabValue === 'scanner' ? (
+              <Box sx={{ width: '100%', maxWidth: 500, margin: '0 auto' }}>
+                <QrReader
+                  constraints={{ facingMode: 'environment' }}
+                  onResult={(result) => {
+                    if (result) {
+                      handleScan(result.getText());
+                    }
+                  }}
+                  scanDelay={500}
+                />
+              </Box>
+            ) : (
+              <BeneficiaireSearch onSelectBeneficiaire={handleSelectBeneficiaire} />
+            )}
           </Paper>
         );
 

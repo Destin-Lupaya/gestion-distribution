@@ -1173,6 +1173,53 @@ app.post('/api/register-distribution', async (req, res) => {
   }
 });
 
+// Route pour rechercher des bénéficiaires par token ou nom
+app.get('/api/beneficiaires/search', async (req, res) => {
+  try {
+    const { query } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Un terme de recherche est requis' });
+    }
+    
+    console.log(`Recherche de bénéficiaires avec le terme: ${query}`);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Requête pour rechercher les bénéficiaires par token ou nom
+    const [rows] = await connection.execute(`
+      SELECT 
+        h.id as household_id,
+        h.nom_menage as nom_du_menage,
+        h.token_number,
+        r.id as recipient_id,
+        r.first_name as prenom,
+        r.middle_name as deuxieme_nom,
+        r.last_name as nom,
+        CONCAT(r.first_name, ' ', IFNULL(r.middle_name, ''), ' ', r.last_name) as nom_complet,
+        s.nom as site_de_distribution,
+        s.id as site_id,
+        s.adresse
+      FROM households h
+      LEFT JOIN recipients r ON h.id = r.household_id
+      LEFT JOIN sites s ON h.site_distribution_id = s.id
+      WHERE 
+        h.token_number LIKE ? OR
+        h.nom_menage LIKE ? OR
+        CONCAT(r.first_name, ' ', IFNULL(r.middle_name, ''), ' ', r.last_name) LIKE ?
+      LIMIT 20
+    `, [`%${query}%`, `%${query}%`, `%${query}%`]);
+    
+    await connection.end();
+    
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Erreur lors de la recherche de bénéficiaires:', error);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 // Routes pour la nutrition
 // Récupérer le rapport de nutrition
 app.get('/api/nutrition/report', async (req, res) => {

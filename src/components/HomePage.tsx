@@ -16,23 +16,25 @@ const FeatureCard = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(3),
   borderRadius: '8px',
   transition: 'transform 0.3s ease, box-shadow 0.3s ease',
-  boxShadow: '0 2px 10px rgba(0, 0, 0, 0.05)',
+  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.08)',
+  border: '1px solid rgba(0, 0, 0, 0.05)',
   '&:hover': {
     transform: 'translateY(-5px)',
-    boxShadow: '0 10px 20px rgba(0, 0, 0, 0.1)',
+    boxShadow: '0 12px 24px rgba(0, 0, 0, 0.15)',
   },
 }));
 
 const IconWrapper = styled(Box)(({ theme }) => ({
   backgroundColor: theme.palette.primary.main,
-  color: '#ffffff',
-  width: 60,
-  height: 60,
+  color: '#FFFFFF',
+  width: 64,
+  height: 64,
   borderRadius: '50%',
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   marginBottom: theme.spacing(2),
+  boxShadow: '0 4px 8px rgba(0, 0, 0, 0.15)',
 }));
 
 const HomePage: React.FC = () => {
@@ -42,7 +44,7 @@ const HomePage: React.FC = () => {
         title="Système de Gestion des Distributions" 
         subtitle="Une plateforme complète pour gérer efficacement les distributions d'aide alimentaire et non alimentaire"
         buttonText="Commencer une distribution"
-        buttonLink="/signatures"
+        buttonLink="/app/signatures"
       />
       
       <Container maxWidth="lg" sx={{ py: 6 }}>
@@ -64,7 +66,7 @@ const HomePage: React.FC = () => {
               </Typography>
               <Button 
                 component={Link} 
-                to="/signatures" 
+                to="/app/signatures" 
                 variant="outlined" 
                 color="primary"
                 sx={{ alignSelf: 'flex-start' }}
@@ -87,7 +89,7 @@ const HomePage: React.FC = () => {
               </Typography>
               <Button 
                 component={Link} 
-                to="/pending-distributions" 
+                to="/app/pending-distributions" 
                 variant="outlined" 
                 color="primary"
                 sx={{ alignSelf: 'flex-start' }}
@@ -110,7 +112,7 @@ const HomePage: React.FC = () => {
               </Typography>
               <Button 
                 component={Link} 
-                to="/rapport" 
+                to="/app/rapport" 
                 variant="outlined" 
                 color="primary"
                 sx={{ alignSelf: 'flex-start' }}
@@ -141,10 +143,10 @@ const HomePage: React.FC = () => {
                   </Typography>
                 </CardContent>
                 <CardActions sx={{ p: 2 }}>
-                  <Button component={Link} to="/nutrition-registration" size="small" color="primary">
+                  <Button component={Link} to="/app/nutrition-registration" size="small" color="primary">
                     Enregistrement
                   </Button>
-                  <Button component={Link} to="/nutrition-distribution" size="small" color="primary">
+                  <Button component={Link} to="/app/nutrition-distribution" size="small" color="primary">
                     Distribution
                   </Button>
                 </CardActions>

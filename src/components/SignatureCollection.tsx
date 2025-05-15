@@ -20,6 +20,7 @@ import {
 import SignaturePad from 'react-signature-canvas';
 import toast from 'react-hot-toast';
 import apiService from '../services/apiService';
+import BeneficiaireSearchTab from './BeneficiaireSearchTab';
 
 interface BeneficiaryInfo {
   id: number;
@@ -488,8 +489,28 @@ export default function SignatureCollection() {
       )}
 
       {activeTab === 1 && (
-        <Paper elevation={3} sx={{ p: 3 }}>
-          <form onSubmit={handleManualSubmit}>
+        <Box>
+          <BeneficiaireSearchTab 
+            onBeneficiaireSelect={(beneficiaire) => {
+              // Convertir les données du bénéficiaire au format attendu par le formulaire
+              setManualFormData({
+                id: 0,
+                site_name: beneficiaire.site_de_distribution,
+                household_id: beneficiaire.household_id,
+                household_name: beneficiaire.nom_du_menage,
+                token_number: beneficiaire.token_number,
+                beneficiary_count: 1, // Valeur par défaut
+                first_name: beneficiaire.prenom,
+                middle_name: beneficiaire.deuxieme_nom || '',
+                last_name: beneficiaire.nom,
+                site_address: beneficiaire.adresse || '',
+                alternate_recipient: ''
+              });
+            }}
+          />
+          
+          <Paper elevation={3} sx={{ p: 3 }}>
+            <form onSubmit={handleManualSubmit}>
             <Grid container spacing={2}>
               <Grid item xs={12} sm={6}>
                 <TextField
@@ -628,6 +649,7 @@ export default function SignatureCollection() {
             )}
           </form>
         </Paper>
+        </Box>
       )}
 
       {/* Scanner Dialog */}

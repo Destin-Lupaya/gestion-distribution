@@ -4,12 +4,13 @@ import { Link } from 'react-router-dom';
 import { styled } from '@mui/material/styles';
 
 const BannerContainer = styled(Box)(({ theme }) => ({
-  background: `linear-gradient(135deg, ${theme.palette.secondary.main} 0%, ${theme.palette.primary.dark} 100%)`,
+  background: `linear-gradient(135deg, ${theme.palette.secondary.dark} 0%, ${theme.palette.primary.main} 100%)`,
   padding: theme.spacing(6, 0),
-  color: '#ffffff',
+  color: '#FFFFFF',
   position: 'relative',
   overflow: 'hidden',
   marginBottom: theme.spacing(4),
+  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
 }));
 
 const BannerOverlay = styled(Box)({
@@ -55,10 +56,10 @@ const Banner: React.FC<BannerProps> = ({ title, subtitle, buttonText, buttonLink
     <BannerContainer>
       <BannerOverlay />
       <BannerContent maxWidth="lg">
-        <Typography variant="h3" component="h1" sx={{ fontWeight: 700, mb: 1 }}>
+        <Typography variant="h3" component="h1" sx={{ fontWeight: 700, mb: 1, textShadow: '0 1px 2px rgba(0,0,0,0.2)' }}>
           {title}
         </Typography>
-        <Typography variant="h5" sx={{ fontWeight: 400, maxWidth: '800px', opacity: 0.9 }}>
+        <Typography variant="h5" sx={{ fontWeight: 500, maxWidth: '800px', color: '#FFFFFF', letterSpacing: '0.2px' }}>
           {subtitle}
         </Typography>
         {buttonText && buttonLink && (

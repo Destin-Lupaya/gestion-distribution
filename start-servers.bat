@@ -32,11 +32,10 @@ echo Demarrage des nouveaux serveurs...
 mysql -u root -e "CREATE DATABASE IF NOT EXISTS gestion_distribution;" >nul 2>&1
 
 :: Demarrer le serveur backend dans une nouvelle fenetre
-start "Backend Server" cmd /c "cd /d %~dp0 && node server.js"
+start "Backend Server" cmd /c "cd /d %~dp0 && node server-combined.js"
 
-:: Attendre 5 secondes pour que le backend demarre
-echo Attendre 5 secondes, appuyez sur CTRL+C pour quitter ...
-timeout /t 5 /nobreak >nul
+:: Attendre 2 secondes pour que le backend démarre
+timeout /t 2 /nobreak >nul
 
 :: Demarrer le serveur frontend dans une nouvelle fenetre
 start "Frontend Server" cmd /c "cd /d %~dp0 && npm run dev"

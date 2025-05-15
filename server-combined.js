@@ -830,6 +830,143 @@ app.post('/api/register-distribution', async (req, res) => {
   }
 });
 
+// Route pour rechercher des bénéficiaires par token ou nom
+app.get('/api/beneficiaires/search', async (req, res) => {
+  let connection;
+  try {
+    const { query } = req.query;
+    
+    if (!query) {
+      return res.status(400).json({ error: 'Un terme de recherche est requis' });
+    }
+    
+    console.log(`Recherche de bénéficiaires avec le terme: ${query}`);
+    
+    // Créer une connexion à la base de données
+    connection = await pool.getConnection();
+    
+    // Vérifier la structure de la table households pour s'assurer que les colonnes existent
+    const [columns] = await connection.query('SHOW COLUMNS FROM households');
+    const columnNames = columns.map(col => col.Field);
+    console.log('Colonnes disponibles dans la table households:', columnNames);
+    
+    // Construire la requête dynamiquement en fonction des colonnes disponibles
+    let selectFields = ['h.id as household_id', 'h.token_number'];
+    let whereConditions = ['h.token_number LIKE ?'];
+    let queryParams = [`%${query}%`];
+    
+    // Ajouter les champs conditionnellement s'ils existent
+    if (columnNames.includes('nom_menage')) {
+      selectFields.push('h.nom_menage as nom_du_menage');
+      whereConditions.push('h.nom_menage LIKE ?');
+      queryParams.push(`%${query}%`);
+    } else if (columnNames.includes('household_name')) {
+      selectFields.push('h.household_name as nom_du_menage');
+      whereConditions.push('h.household_name LIKE ?');
+      queryParams.push(`%${query}%`);
+    }
+    
+    // Ajouter les champs de nom
+    if (columnNames.includes('first_name')) selectFields.push('h.first_name as prenom');
+    if (columnNames.includes('middle_name')) selectFields.push('h.middle_name as deuxieme_nom');
+    if (columnNames.includes('last_name')) selectFields.push('h.last_name as nom');
+    
+    // Ajouter le nom complet si les champs existent
+    if (columnNames.includes('first_name') && columnNames.includes('last_name')) {
+      selectFields.push('CONCAT(h.first_name, " ", IFNULL(h.middle_name, ""), " ", h.last_name) as nom_complet');
+      whereConditions.push('CONCAT(h.first_name, " ", IFNULL(h.middle_name, ""), " ", h.last_name) LIKE ?');
+      queryParams.push(`%${query}%`);
+    }
+    
+    // Ajouter les champs de site
+    if (columnNames.includes('site_name')) selectFields.push('h.site_name as site_de_distribution');
+    if (columnNames.includes('site_id')) selectFields.push('h.site_id');
+    if (columnNames.includes('site_address')) selectFields.push('h.site_address as adresse');
+    
+    // Construire la requête SQL
+    const sql = `
+      SELECT 
+        ${selectFields.join(',\n        ')}
+      FROM households h
+      WHERE 
+        ${whereConditions.join(' OR\n        ')}
+      LIMIT 20
+    `;
+    
+    console.log('Requête SQL générée:', sql);
+    console.log('Paramètres:', queryParams);
+    
+    // Exécuter la requête
+    const [rows] = await connection.query(sql, queryParams);
+    
+    connection.release();
+    
+    res.status(200).json(rows);
+  } catch (error) {
+    console.error('Erreur lors de la recherche de bénéficiaires:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Endpoint pour récupérer tous les bénéficiaires
+app.get('/api/recipients', async (req, res) => {
+  let connection;
+  try {
+    console.log('Récupération de tous les bénéficiaires');
+    connection = await pool.getConnection();
+    
+    const [rows] = await connection.query(
+      'SELECT r.*, h.nom_menage as household_name, h.token_number, s.nom as site_name ' +
+      'FROM recipients r ' +
+      'LEFT JOIN households h ON r.household_id = h.id ' +
+      'LEFT JOIN sites s ON h.site_distribution_id = s.id ' +
+      'ORDER BY r.created_at DESC'
+    );
+    
+    console.log(`${rows.length} bénéficiaires trouvés`);
+    
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des bénéficiaires:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Endpoint pour récupérer toutes les distributions
+app.get('/api/distributions', async (req, res) => {
+  let connection;
+  try {
+    console.log('Récupération de toutes les distributions');
+    connection = await pool.getConnection();
+    
+    const [rows] = await connection.query(
+      'SELECT d.*, r.first_name, r.middle_name, r.last_name, r.site_name, r.household_name, r.token_number, r.beneficiary_count ' +
+      'FROM distributions d ' +
+      'JOIN recipients r ON d.recipient_id = r.id ' +
+      'ORDER BY d.created_at DESC'
+    );
+    
+    console.log(`${rows.length} distributions trouvées`);
+    
+    res.json({
+      success: true,
+      data: rows
+    });
+  } catch (error) {
+    console.error('Erreur lors de la récupération des distributions:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 // Endpoint pour récupérer les distributions en attente
 app.get('/api/distributions/pending', async (req, res) => {
   let connection;

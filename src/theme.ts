@@ -3,49 +3,51 @@ import { createTheme } from '@mui/material/styles';
 export const theme = createTheme({
   palette: {
     primary: {
-      main: '#0088ce', // Bleu WFP/Partner Connect
-      light: '#4db8ff',
-      dark: '#00599e',
-      contrastText: '#ffffff',
+      main: '#0078BE', // Bleu WFP/Partner Connect plus vif
+      light: '#3399DD',
+      dark: '#005A8C',
+      contrastText: '#FFFFFF',
     },
     secondary: {
-      main: '#00263d', // Bleu foncé de Partner Connect
-      light: '#2c4658',
-      dark: '#001a2c',
-      contrastText: '#ffffff',
+      main: '#003C5F', // Bleu foncé plus profond
+      light: '#005280',
+      dark: '#002540',
+      contrastText: '#FFFFFF',
     },
     background: {
-      default: '#f5f7fa',
-      paper: '#ffffff',
+      default: '#F8FAFC',
+      paper: '#FFFFFF',
     },
     error: {
-      main: '#e53935',
-      light: '#ff6f60',
-      dark: '#ab000d',
+      main: '#D32F2F',
+      light: '#EF5350',
+      dark: '#B71C1C',
     },
     success: {
-      main: '#2e7d32',
-      light: '#60ad5e',
-      dark: '#005005',
+      main: '#2E7D32',
+      light: '#4CAF50',
+      dark: '#1B5E20',
     },
     text: {
-      primary: '#00263d',
-      secondary: '#546e7a',
+      primary: '#212121',
+      secondary: '#424242',
     },
   },
   typography: {
     fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
     h1: {
       fontSize: '2.5rem',
-      fontWeight: 700,
+      fontWeight: 800,
       lineHeight: 1.2,
-      color: '#1e293b',
+      color: '#000000',
+      letterSpacing: '-0.5px',
     },
     h2: {
       fontSize: '2rem',
       fontWeight: 700,
       lineHeight: 1.2,
-      color: '#1e293b',
+      color: '#000000',
+      letterSpacing: '-0.3px',
     },
     h3: {
       fontSize: '1.75rem',
