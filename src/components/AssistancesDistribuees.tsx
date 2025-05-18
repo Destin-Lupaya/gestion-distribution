@@ -163,12 +163,21 @@ const AssistancesDistribuees: React.FC = () => {
     setLoading(true);
     try {
       const response = await apiService.get(`/api/evenements-distribution/${evenementId}/beneficiaires`);
-      setBeneficiaires(response.data);
+      // Vérifier que les données reçues sont un tableau
+      if (Array.isArray(response.data)) {
+        setBeneficiaires(response.data);
+      } else {
+        console.warn('Les données reçues ne sont pas un tableau:', response.data);
+        // Initialiser avec un tableau vide si les données ne sont pas un tableau
+        setBeneficiaires([]);
+      }
       setError(null);
     } catch (err) {
       console.error('Erreur lors du chargement des bénéficiaires:', err);
       setError('Impossible de charger les bénéficiaires. Veuillez réessayer plus tard.');
       toast.error('Erreur lors du chargement des bénéficiaires');
+      // Initialiser avec un tableau vide en cas d'erreur
+      setBeneficiaires([]);
     } finally {
       setLoading(false);
     }
@@ -282,8 +291,8 @@ const AssistancesDistribuees: React.FC = () => {
     }
   };
 
-  // Filtrer les bénéficiaires selon les critères
-  const filteredBeneficiaires = beneficiaires.filter(beneficiaire => {
+  // S'assurer que beneficiaires est un tableau avant d'appliquer le filtre
+  const filteredBeneficiaires = Array.isArray(beneficiaires) ? beneficiaires.filter(beneficiaire => {
     // Filtre par statut
     if (filterStatus !== 'all' && beneficiaire.statut_eligibilite !== filterStatus) {
       return false;
@@ -313,7 +322,7 @@ const AssistancesDistribuees: React.FC = () => {
     }
     
     return true;
-  });
+  }) : [];
 
   return (
     <PageTransition>

@@ -31,6 +31,7 @@ import SearchIcon from '@mui/icons-material/Search';
 import EventIcon from '@mui/icons-material/Event';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import PeopleIcon from '@mui/icons-material/People';
+import LocationOnIcon from '@mui/icons-material/LocationOn';
 import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
 import BarChartIcon from '@mui/icons-material/BarChart';
 
@@ -307,22 +308,20 @@ function Navbar() {
                 onClose={() => setDistMenuAnchor(null)}
                 sx={{ mt: 1 }}
               >
-                {user?.roles?.includes('field') && (
-                  <MenuItem 
-                    component={Link} 
-                    to="/app/signatures" 
-                    onClick={() => setDistMenuAnchor(null)}
-                    sx={{ 
-                      color: isActive('/app/signatures') ? 'primary.main' : 'inherit',
-                      fontWeight: isActive('/app/signatures') ? 600 : 400
-                    }}
-                  >
-                    <ListItemIcon>
-                      <DrawIcon fontSize="small" color={isActive('/app/signatures') ? 'primary' : 'inherit'} />
-                    </ListItemIcon>
-                    Collecte de signatures
-                  </MenuItem>
-                )}
+                <MenuItem 
+                  component={Link} 
+                  to="/app/signatures" 
+                  onClick={() => setDistMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/signatures') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/signatures') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <DrawIcon fontSize="small" color={isActive('/app/signatures') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  Collecte de signatures
+                </MenuItem>
                 {user?.roles?.includes('distribution') && (
                   <MenuItem 
                     component={Link} 
@@ -380,6 +379,48 @@ function Navbar() {
                     <BarChartIcon fontSize="small" color={isActive('/app/unified-report') ? "primary" : "inherit"} />
                   </ListItemIcon>
                   <Typography>Rapports Unifiés</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/reception-waybill" 
+                  onClick={() => setDistMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/reception-waybill') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/reception-waybill') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <InventoryIcon fontSize="small" color={isActive('/app/reception-waybill') ? "primary" : "inherit"} />
+                  </ListItemIcon>
+                  <Typography>Réception Waybill</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/mpos" 
+                  onClick={() => setDistMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/mpos') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/mpos') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <PeopleIcon fontSize="small" color={isActive('/app/mpos') ? "primary" : "inherit"} />
+                  </ListItemIcon>
+                  <Typography>MPOS</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/geo-data" 
+                  onClick={() => setDistMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/geo-data') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/geo-data') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <LocationOnIcon fontSize="small" color={isActive('/app/geo-data') ? "primary" : "inherit"} />
+                  </ListItemIcon>
+                  <Typography>Données Géographiques</Typography>
                 </MenuItem>
               </Menu>
             </Box>
@@ -460,6 +501,62 @@ function Navbar() {
                     <BarChartIcon fontSize="small" color={isActive('/app/unified-report') ? 'primary' : 'inherit'} />
                   </ListItemIcon>
                   <Typography>Rapports Unifiés</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/detailed-reports" 
+                  onClick={() => setReportMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/detailed-reports') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/detailed-reports') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <AssessmentIcon fontSize="small" color={isActive('/app/detailed-reports') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  <Typography>Rapports Détaillés</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/distribution-report" 
+                  onClick={() => setReportMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/distribution-report') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/distribution-report') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <PeopleIcon fontSize="small" color={isActive('/app/distribution-report') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  <Typography>Rapport de Distribution</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/batch-commodity-report" 
+                  onClick={() => setReportMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/batch-commodity-report') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/batch-commodity-report') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <InventoryIcon fontSize="small" color={isActive('/app/batch-commodity-report') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  <Typography>Rapport par Batch et Commodité</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/tonnage-comparison-report" 
+                  onClick={() => setReportMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/tonnage-comparison-report') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/tonnage-comparison-report') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <BarChartIcon fontSize="small" color={isActive('/app/tonnage-comparison-report') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  <Typography>Comparaison Tonnage Waybill/MPOS</Typography>
                 </MenuItem>
               </Menu>
             </Box>

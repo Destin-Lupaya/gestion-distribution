@@ -28,7 +28,7 @@ console.log('Configuration de l\'environnement:', {
 });
 
 const app = express();
-const PORT = process.env.PORT || 3001;
+const PORT = process.env.PORT || 3002;
 
 // Configuration CORS plus permissive
 app.use(cors({
@@ -1237,7 +1237,7 @@ app.get('/api/recipients', async (req, res) => {
       'SELECT r.*, h.nom_menage as household_name, h.token_number, s.nom as site_name ' +
       'FROM recipients r ' +
       'LEFT JOIN households h ON r.household_id = h.id ' +
-      'LEFT JOIN sites s ON h.site_distribution_id = s.id ' +
+      'LEFT JOIN sites s ON h.site_id = s.id ' +
       'ORDER BY r.created_at DESC'
     );
     
@@ -1627,12 +1627,14 @@ app.get('/api/evenements-distribution', async (req, res) => {
       console.log('Table evenements_distribution créée et données de test insérées');
     }
     
-    // Vider la table et la recréer avec les bonnes colonnes
-    await connection.query('DROP TABLE IF EXISTS evenements_distribution');
+    // Vérifier si la table existe déjà avant de tenter de la créer
+    const [existingTables] = await connection.query("SHOW TABLES LIKE 'evenements_distribution'");
     
-    // Créer la table avec les bonnes colonnes
-    await connection.query(`
-      CREATE TABLE evenements_distribution (
+    // Si la table n'existe pas, la créer
+    if (existingTables.length === 0) {
+      // Créer la table avec les bonnes colonnes
+      await connection.query(`
+        CREATE TABLE evenements_distribution (
         id VARCHAR(36) PRIMARY KEY,
         titre VARCHAR(255) NOT NULL,
         description TEXT,
@@ -1653,40 +1655,41 @@ app.get('/api/evenements-distribution', async (req, res) => {
       )
     `);
     
-    // Insérer des données de test
-    await connection.query(`
-      INSERT INTO evenements_distribution (
-        id, 
-        titre, 
-        description, 
-        date_debut, 
-        date_fin, 
-        statut, 
-        site_id, 
-        programme_id, 
-        nom_programme, 
-        nom_site, 
-        date_distribution_prevue, 
-        type_assistance_prevue, 
-        quantite_totale_prevue
-      )
-      SELECT 
-        UUID(), 
-        CONCAT('Distribution à ', s.nom), 
-        CONCAT('Distribution de fournitures dans le cadre du programme ', p.nom), 
-        DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY), 
-        DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) + 1 DAY), 
-        'planifié',
-        s.id,
-        p.id,
-        p.nom,
-        s.nom,
-        DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY),
-        'Ration alimentaire standard',
-        '{"riz": 500, "huile": 200, "sel": 100}'
-      FROM sites s, programmes p
-      LIMIT 5
-    `);
+      // Insérer des données de test
+      await connection.query(`
+        INSERT INTO evenements_distribution (
+          id, 
+          titre, 
+          description, 
+          date_debut, 
+          date_fin, 
+          statut, 
+          site_id, 
+          programme_id, 
+          nom_programme, 
+          nom_site, 
+          date_distribution_prevue, 
+          type_assistance_prevue, 
+          quantite_totale_prevue
+        )
+        SELECT 
+          UUID(), 
+          CONCAT('Distribution à ', s.nom), 
+          CONCAT('Distribution de fournitures dans le cadre du programme ', p.nom), 
+          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY), 
+          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) + 1 DAY), 
+          'planifié',
+          s.id,
+          p.id,
+          p.nom,
+          s.nom,
+          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY),
+          'Ration alimentaire standard',
+          '{"riz": 500, "huile": 200, "sel": 100}'
+        FROM sites s, programmes p
+        LIMIT 5
+      `);
+    }
     
     // Récupérer les données
     const [rows] = await connection.query(`
@@ -2418,6 +2421,758 @@ app.get('/api/reports/distribution', async (req, res) => {
   }
 });
 
+// Endpoints pour gérer les waybills
+app.get('/api/waybill-items', async (req, res) => {
+  let connection;
+  try {
+    console.log('Récupération des données de waybill');
+    connection = await pool.getConnection();
+    
+    // Vérifier si la table waybill_items existe
+    const [tables] = await connection.query("SHOW TABLES LIKE 'waybill_items'");
+    
+    // Si la table n'existe pas, la créer
+    if (tables.length === 0) {
+      console.log('Création de la table waybill_items');
+      await connection.query(`
+        CREATE TABLE waybill_items (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          waybill_number VARCHAR(50) NOT NULL,
+          batchnumber VARCHAR(50) NOT NULL,
+          commodity_specific VARCHAR(100) NOT NULL,
+          type VARCHAR(50) NOT NULL,
+          quantity_sent DECIMAL(10, 3) NOT NULL,
+          unit_sent VARCHAR(10) NOT NULL,
+          tonne_sent DECIMAL(10, 3) NOT NULL,
+          quantity DECIMAL(10, 3) NOT NULL,
+          unit_received VARCHAR(10) NOT NULL,
+          tonne_received DECIMAL(10, 3) NOT NULL,
+          obs VARCHAR(255),
+          loss DECIMAL(10, 3) NOT NULL,
+          mount_in DECIMAL(10, 3) NOT NULL,
+          return_qty DECIMAL(10, 3) NOT NULL,
+          activity VARCHAR(100),
+          date DATE NOT NULL,
+          location VARCHAR(100) NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('Table waybill_items créée');
+    }
+    
+    // Récupérer les données
+    const [rows] = await connection.query('SELECT * FROM waybill_items ORDER BY date DESC');
+    console.log(`${rows.length} éléments de waybill trouvés`);
+    
+    res.json(rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des données de waybill:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.post('/api/waybill-items', async (req, res) => {
+  let connection;
+  try {
+    console.log('Ajout d\'un nouvel élément de waybill');
+    console.log('Données reçues:', req.body);
+    
+    const {
+      waybill_number,
+      batchnumber,
+      commodity_specific,
+      type,
+      quantity_sent,
+      unit_sent,
+      tonne_sent,
+      quantity,
+      unit_received,
+      tonne_received,
+      obs,
+      loss,
+      mount_in,
+      return_qty,
+      activity,
+      date,
+      location
+    } = req.body;
+    
+    connection = await pool.getConnection();
+    
+    const [result] = await connection.query(`
+      INSERT INTO waybill_items (
+        waybill_number,
+        batchnumber,
+        commodity_specific,
+        type,
+        quantity_sent,
+        unit_sent,
+        tonne_sent,
+        quantity,
+        unit_received,
+        tonne_received,
+        obs,
+        loss,
+        mount_in,
+        return_qty,
+        activity,
+        date,
+        location
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      waybill_number,
+      batchnumber,
+      commodity_specific,
+      type,
+      quantity_sent,
+      unit_sent,
+      tonne_sent,
+      quantity,
+      unit_received,
+      tonne_received,
+      obs || '',
+      loss,
+      mount_in,
+      return_qty,
+      activity || '',
+      date,
+      location
+    ]);
+    
+    const id = result.insertId;
+    console.log(`Nouvel élément de waybill ajouté avec ID: ${id}`);
+    
+    // Récupérer l'élément nouvellement créé
+    const [rows] = await connection.query('SELECT * FROM waybill_items WHERE id = ?', [id]);
+    
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout d\'un élément de waybill:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.put('/api/waybill-items/:id', async (req, res) => {
+  let connection;
+  try {
+    const { id } = req.params;
+    console.log(`Mise à jour de l'élément de waybill ${id}`);
+    console.log('Données reçues:', req.body);
+    
+    const {
+      waybill_number,
+      batchnumber,
+      commodity_specific,
+      type,
+      quantity_sent,
+      unit_sent,
+      tonne_sent,
+      quantity,
+      unit_received,
+      tonne_received,
+      obs,
+      loss,
+      mount_in,
+      return_qty,
+      activity,
+      date,
+      location
+    } = req.body;
+    
+    connection = await pool.getConnection();
+    
+    await connection.query(`
+      UPDATE waybill_items SET
+        waybill_number = ?,
+        batchnumber = ?,
+        commodity_specific = ?,
+        type = ?,
+        quantity_sent = ?,
+        unit_sent = ?,
+        tonne_sent = ?,
+        quantity = ?,
+        unit_received = ?,
+        tonne_received = ?,
+        obs = ?,
+        loss = ?,
+        mount_in = ?,
+        return_qty = ?,
+        activity = ?,
+        date = ?,
+        location = ?
+      WHERE id = ?
+    `, [
+      waybill_number,
+      batchnumber,
+      commodity_specific,
+      type,
+      quantity_sent,
+      unit_sent,
+      tonne_sent,
+      quantity,
+      unit_received,
+      tonne_received,
+      obs || '',
+      loss,
+      mount_in,
+      return_qty,
+      activity || '',
+      date,
+      location,
+      id
+    ]);
+    
+    console.log(`Élément de waybill ${id} mis à jour`);
+    
+    // Récupérer l'élément mis à jour
+    const [rows] = await connection.query('SELECT * FROM waybill_items WHERE id = ?', [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Élément non trouvé' });
+    }
+    
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour d\'un élément de waybill:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.delete('/api/waybill-items/:id', async (req, res) => {
+  let connection;
+  try {
+    const { id } = req.params;
+    console.log(`Suppression de l'élément de waybill ${id}`);
+    
+    connection = await pool.getConnection();
+    
+    const [result] = await connection.query('DELETE FROM waybill_items WHERE id = ?', [id]);
+    
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Élément non trouvé' });
+    }
+    
+    console.log(`Élément de waybill ${id} supprimé`);
+    
+    res.json({ success: true, message: 'Élément supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression d\'un élément MPOS:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Endpoints pour gérer les données MPOS
+app.get('/api/pos-data', async (req, res) => {
+  let connection;
+  try {
+    console.log('Récupération des données MPOS');
+    connection = await pool.getConnection();
+    
+    // Vérifier si la table pos_data existe
+    const [tables] = await connection.query("SHOW TABLES LIKE 'pos_data'");
+    
+    // Si la table n'existe pas, la créer
+    if (tables.length === 0) {
+      console.log('Création de la table pos_data');
+      await connection.query(`
+        CREATE TABLE pos_data (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          terminal VARCHAR(100) NOT NULL,
+          menage INT NOT NULL,
+          beneficial INT NOT NULL,
+          farine DECIMAL(10, 2) NOT NULL,
+          haricot DECIMAL(10, 2) NOT NULL,
+          huile DECIMAL(10, 2) NOT NULL,
+          sel DECIMAL(10, 2) NOT NULL,
+          total DECIMAL(10, 2) NOT NULL,
+          date DATE NOT NULL,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+      console.log('Table pos_data créée');
+    }
+    
+    // Récupérer les données
+    const [rows] = await connection.query('SELECT * FROM pos_data ORDER BY date DESC');
+    console.log(`${rows.length} éléments MPOS trouvés`);
+    
+    res.json(rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des données MPOS:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+    
+
+
+
+// Endpoint pour le rapport par commodité selon le numéro de batch
+app.get('/api/reports/batch-commodity', async (req, res) => {
+  let connection;
+  try {
+    console.log('Génération du rapport par commodité selon le batch');
+    console.log('Paramètres reçus:', req.query);
+    connection = await pool.getConnection();
+    
+    // Récupérer les paramètres de filtre
+    const { startDate, endDate, activity, location } = req.query;
+    
+    // Construire les conditions de filtrage
+    const conditions = [];
+    const queryParams = [];
+    
+    if (startDate) {
+      conditions.push('date >= ?');
+      queryParams.push(startDate);
+    }
+    
+    if (endDate) {
+      conditions.push('date <= ?');
+      queryParams.push(endDate);
+    }
+    
+    if (activity) {
+      conditions.push('activity = ?');
+      queryParams.push(activity);
+    }
+    
+    if (location) {
+      conditions.push('location = ?');
+      queryParams.push(location);
+    }
+    
+    // Construire la clause WHERE
+    const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
+    
+    // Requête SQL pour récupérer les données par batch et commodité
+    const query = `
+      SELECT 
+        activity,
+        batchnumber,
+        commodity_specific,
+        SUM(tonne_sent) as tonne_sent,
+        SUM(quantity_sent - quantity - return_qty) as mvmt_interne,
+        SUM(tonne_received) as tonne_received,
+        SUM(return_qty) as return_qty,
+        SUM(loss) as loss,
+        location
+      FROM waybill_items
+      ${whereClause}
+      GROUP BY activity, batchnumber, commodity_specific, location
+      ORDER BY activity, batchnumber, commodity_specific
+    `;
+    
+    // Exécuter la requête
+    const [rows] = await connection.query(query, queryParams);
+    
+    // Calculer les totaux par commodité
+    const totals = {};
+    rows.forEach(item => {
+      const commodity = item.commodity_specific;
+      if (!totals[commodity]) {
+        totals[commodity] = {
+          tonne_sent: 0,
+          mvmt_interne: 0,
+          tonne_received: 0,
+          return_qty: 0,
+          loss: 0
+        };
+      }
+      
+      totals[commodity].tonne_sent += item.tonne_sent || 0;
+      totals[commodity].mvmt_interne += item.mvmt_interne || 0;
+      totals[commodity].tonne_received += item.tonne_received || 0;
+      totals[commodity].return_qty += item.return_qty || 0;
+      totals[commodity].loss += item.loss || 0;
+    });
+    
+    // Ajouter une ligne de total général
+    let totalGeneral = {
+      activity: 'Total général',
+      batchnumber: '',
+      commodity_specific: '',
+      tonne_sent: 0,
+      mvmt_interne: 0,
+      tonne_received: 0,
+      return_qty: 0,
+      loss: 0,
+      location: ''
+    };
+    
+    rows.forEach(item => {
+      totalGeneral.tonne_sent += item.tonne_sent || 0;
+      totalGeneral.mvmt_interne += item.mvmt_interne || 0;
+      totalGeneral.tonne_received += item.tonne_received || 0;
+      totalGeneral.return_qty += item.return_qty || 0;
+      totalGeneral.loss += item.loss || 0;
+    });
+    
+    // Ajouter des lignes de total par commodité
+    const resultsWithTotals = [...rows];
+    
+    Object.entries(totals).forEach(([commodity, values]) => {
+      resultsWithTotals.push({
+        activity: 'Total',
+        batchnumber: '',
+        commodity_specific: commodity,
+        tonne_sent: values.tonne_sent,
+        mvmt_interne: values.mvmt_interne,
+        tonne_received: values.tonne_received,
+        return_qty: values.return_qty,
+        loss: values.loss,
+        location: ''
+      });
+    });
+    
+    // Ajouter le total général à la fin
+    resultsWithTotals.push(totalGeneral);
+    
+    // Renvoyer les résultats
+    res.json(resultsWithTotals);
+  } catch (error) {
+    console.error('Erreur lors de la génération du rapport par commodité selon le batch:', error);
+    res.status(500).json({ error: 'Erreur lors de la génération du rapport par commodité selon le batch' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Endpoint pour le rapport de comparaison de tonnage entre waybills et MPOS
+app.get('/api/reports/tonnage-comparison', async (req, res) => {
+  let connection;
+  try {
+    console.log('Génération du rapport de comparaison de tonnage');
+    console.log('Paramètres reçus:', req.query);
+    connection = await pool.getConnection();
+    
+    // Récupérer les paramètres de filtre
+    const { startDate, endDate } = req.query;
+    
+    // Construire les conditions de date si elles sont fournies
+    let dateCondition = '';
+    const queryParams = [];
+    
+    if (startDate && endDate) {
+      dateCondition = 'WHERE date BETWEEN ? AND ?';
+      queryParams.push(startDate, endDate);
+    } else if (startDate) {
+      dateCondition = 'WHERE date >= ?';
+      queryParams.push(startDate);
+    } else if (endDate) {
+      dateCondition = 'WHERE date <= ?';
+      queryParams.push(endDate);
+    }
+    
+    // 1. Récupérer les données de tonnage des waybills par commodité
+    const waybillQuery = `
+      SELECT 
+        commodity_specific AS commodity,
+        SUM(tonne_received) AS total_tonnage
+      FROM waybill_items
+      ${dateCondition}
+      GROUP BY commodity_specific
+    `;
+    
+    // 2. Récupérer les données de tonnage du MPOS (scope)
+    const mposQuery = `
+      SELECT 
+        'Farine' AS commodity,
+        SUM(farine) / 1000 AS total_tonnage
+      FROM pos_data
+      ${dateCondition}
+      UNION
+      SELECT 
+        'Haricot' AS commodity,
+        SUM(haricot) / 1000 AS total_tonnage
+      FROM pos_data
+      ${dateCondition}
+      UNION
+      SELECT 
+        'Huile' AS commodity,
+        SUM(huile) / 1000 AS total_tonnage
+      FROM pos_data
+      ${dateCondition}
+      UNION
+      SELECT 
+        'Sel' AS commodity,
+        SUM(sel) / 1000 AS total_tonnage
+      FROM pos_data
+      ${dateCondition}
+    `;
+    
+    // Exécuter les requêtes
+    const [waybillResults] = await connection.query(waybillQuery, [...queryParams]);
+    const [mposResults] = await connection.query(mposQuery, [...queryParams, ...queryParams, ...queryParams, ...queryParams]);
+    
+    // Créer un dictionnaire pour faciliter l'accès aux données
+    const waybillData = {};
+    waybillResults.forEach(item => {
+      const commodity = item.commodity?.toLowerCase() || '';
+      if (commodity.includes('farine')) {
+        waybillData['Farine'] = (waybillData['Farine'] || 0) + item.total_tonnage;
+      } else if (commodity.includes('haricot')) {
+        waybillData['Haricot'] = (waybillData['Haricot'] || 0) + item.total_tonnage;
+      } else if (commodity.includes('huile')) {
+        waybillData['Huile'] = (waybillData['Huile'] || 0) + item.total_tonnage;
+      } else if (commodity.includes('sel')) {
+        waybillData['Sel'] = (waybillData['Sel'] || 0) + item.total_tonnage;
+      } else {
+        waybillData[item.commodity] = item.total_tonnage;
+      }
+    });
+    
+    const mposData = {};
+    mposResults.forEach(item => {
+      mposData[item.commodity] = item.total_tonnage;
+    });
+    
+    // Fusionner les données et calculer les différences
+    const allCommodities = new Set([...Object.keys(waybillData), ...Object.keys(mposData)]);
+    
+    const comparisonData = [];
+    allCommodities.forEach(commodity => {
+      const scopeTonnage = mposData[commodity] || 0;
+      const waybillTonnage = waybillData[commodity] || 0;
+      const difference = scopeTonnage - waybillTonnage;
+      
+      let action = '';
+      if (difference > 0) {
+        if (commodity === 'Farine') {
+          action = `À récupérer en sacs: ${Math.abs(difference * 1000 / 25).toFixed(2)}`;
+        } else if (commodity === 'Haricot') {
+          action = `À distribuer en sacs: ${Math.abs(difference * 1000 / 50).toFixed(2)}`;
+        } else if (commodity === 'Huile') {
+          action = `À distribuer en carton: ${Math.abs(difference * 1000 / 20).toFixed(2)}`;
+        } else if (commodity === 'Sel') {
+          action = `À distribuer en sac: ${Math.abs(difference * 1000 / 25).toFixed(2)}`;
+        }
+      } else if (difference < 0) {
+        if (commodity === 'Farine') {
+          action = `À récupérer en sacs: ${Math.abs(difference * 1000 / 25).toFixed(2)}`;
+        } else if (commodity === 'Haricot') {
+          action = `À distribuer en sacs: ${Math.abs(difference * 1000 / 50).toFixed(2)}`;
+        } else if (commodity === 'Huile') {
+          action = `À distribuer en carton: ${Math.abs(difference * 1000 / 20).toFixed(2)}`;
+        } else if (commodity === 'Sel') {
+          action = `À distribuer en sac: ${Math.abs(difference * 1000 / 25).toFixed(2)}`;
+        }
+      }
+      
+      comparisonData.push({
+        id: comparisonData.length + 1,
+        commodity,
+        scope_tonnage: scopeTonnage,
+        waybill_tonnage: waybillTonnage,
+        difference,
+        action
+      });
+    });
+    
+    // Calculer les totaux
+    const totalScopeTonnage = comparisonData.reduce((sum, item) => sum + item.scope_tonnage, 0);
+    const totalWaybillTonnage = comparisonData.reduce((sum, item) => sum + item.waybill_tonnage, 0);
+    const totalDifference = totalScopeTonnage - totalWaybillTonnage;
+    
+    comparisonData.push({
+      id: comparisonData.length + 1,
+      commodity: 'Total',
+      scope_tonnage: totalScopeTonnage,
+      waybill_tonnage: totalWaybillTonnage,
+      difference: totalDifference,
+      action: ''
+    });
+    
+    // Ajouter des données sur les bénéficiaires
+    const [beneficiaryData] = await connection.query(`
+      SELECT 
+        SUM(menage) AS total_menage,
+        SUM(beneficial) AS total_beneficial
+      FROM pos_data
+      ${dateCondition}
+    `, queryParams);
+    
+    // Récupérer les données des bénéficiaires des waybills (si disponible)
+    // Note: Cette partie est fictive et doit être adaptée à votre structure de données réelle
+    const waybillBeneficiaryData = {
+      total_menage: 0,
+      total_beneficial: 0
+    };
+    
+    // Envoyer les résultats
+    res.json({
+      comparison: comparisonData,
+      beneficiaries: {
+        scope: {
+          menage: beneficiaryData[0]?.total_menage || 0,
+          beneficial: beneficiaryData[0]?.total_beneficial || 0
+        },
+        waybill: waybillBeneficiaryData
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la génération du rapport de comparaison de tonnage:', error);
+    res.status(500).json({ error: 'Erreur lors de la génération du rapport de comparaison de tonnage' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.post('/api/pos-data', async (req, res) => {
+  let connection;
+  try {
+    console.log('Ajout d\'un nouvel élément MPOS');
+    console.log('Données reçues:', req.body);
+    
+    const {
+      terminal,
+      menage,
+      beneficial,
+      farine,
+      haricot,
+      huile,
+      sel,
+      total,
+      date
+    } = req.body;
+    
+    connection = await pool.getConnection();
+    
+    const [result] = await connection.query(`
+      INSERT INTO pos_data (
+        terminal,
+        menage,
+        beneficial,
+        farine,
+        haricot,
+        huile,
+        sel,
+        total,
+        date
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      terminal,
+      menage,
+      beneficial,
+      farine,
+      haricot,
+      huile,
+      sel,
+      total,
+      date
+    ]);
+    
+    const id = result.insertId;
+    console.log(`Nouvel élément MPOS ajouté avec ID: ${id}`);
+    
+    // Récupérer l'élément nouvellement créé
+    const [rows] = await connection.query('SELECT * FROM pos_data WHERE id = ?', [id]);
+    
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout d\'un élément MPOS:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.put('/api/pos-data/:id', async (req, res) => {
+  let connection;
+  try {
+    const { id } = req.params;
+    console.log(`Mise à jour de l'élément MPOS ${id}`);
+    console.log('Données reçues:', req.body);
+    
+    const {
+      terminal,
+      menage,
+      beneficial,
+      farine,
+      haricot,
+      huile,
+      sel,
+      total,
+      date
+    } = req.body;
+    
+    connection = await pool.getConnection();
+    
+    await connection.query(`
+      UPDATE pos_data SET
+        terminal = ?,
+        menage = ?,
+        beneficial = ?,
+        farine = ?,
+        haricot = ?,
+        huile = ?,
+        sel = ?,
+        total = ?,
+        date = ?
+      WHERE id = ?
+    `, [
+      terminal,
+      menage,
+      beneficial,
+      farine,
+      haricot,
+      huile,
+      sel,
+      total,
+      date,
+      id
+    ]);
+    
+    console.log(`Élément MPOS ${id} mis à jour`);
+    
+    // Récupérer l'élément mis à jour
+    const [rows] = await connection.query('SELECT * FROM pos_data WHERE id = ?', [id]);
+    
+    if (rows.length === 0) {
+      return res.status(404).json({ error: 'Élément non trouvé' });
+    }
+    
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour d\'un élément MPOS:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+app.delete('/api/geo-points/:id', async (req, res) => {
+  let connection;
+  try {
+    const { id } = req.params;
+    console.log(`Suppression du point géographique ${id}`);
+    
+    connection = await pool.getConnection();
+    
+    // Supprimer le point
+    await connection.query('DELETE FROM geo_points WHERE id = ?', [id]);
+    
+    res.json({ success: true, message: 'Point géographique supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression du point géographique:', error);
+    res.status(500).json({ error: String(error) });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// ... (code après les modifications)
 app.post('/api/nutrition/distributions', async (req, res) => {
   let connection;
   try {

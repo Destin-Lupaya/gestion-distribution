@@ -4,6 +4,10 @@ import ImportList from './components/ImportList';
 import ManualRegistration from './components/ManualRegistration';
 import SignatureCollection from './components/SignatureCollection';
 import UnifiedReport from './components/UnifiedReport';
+import DetailedReports from './components/DetailedReports';
+import DistributionReport from './components/DistributionReport';
+import BatchCommodityReport from './components/BatchCommodityReport';
+import TonnageComparisonReport from './components/TonnageComparisonReport';
 import QRTester from './components/QRTester';
 import TestParser from './components/TestParser';
 import DataGridView from './components/DataGrid';
@@ -22,6 +26,9 @@ import BeneficiaireSearch from './pages/BeneficiaireSearch';
 import ProgrammeAide from './components/ProgrammeAide';
 import CalendrierDistribution from './components/CalendrierDistribution';
 import AssistancesDistribuees from './components/AssistancesDistribuees';
+import ReceptionWaybill from './components/ReceptionWaybill';
+import MPOS from './components/MPOS';
+import GeoData from './components/GeoData';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeProvider, CssBaseline, Box } from '@mui/material';
 import { theme } from './theme';
@@ -116,6 +123,18 @@ const router = createBrowserRouter([
             path: 'assistances-distribuees',
             element: <AssistancesDistribuees />
           },
+          {
+            path: 'reception-waybill',
+            element: <ReceptionWaybill />
+          },
+          {
+            path: 'mpos',
+            element: <MPOS />
+          },
+          {
+            path: 'geo-data',
+            element: <GeoData />
+          },
         ]
       },
       {
@@ -128,6 +147,22 @@ const router = createBrowserRouter([
           {
             path: 'unified-report',
             element: <UnifiedReport />
+          },
+          {
+            path: 'detailed-reports',
+            element: <DetailedReports />
+          },
+          {
+            path: 'distribution-report',
+            element: <DistributionReport />
+          },
+          {
+            path: 'batch-commodity-report',
+            element: <BatchCommodityReport />
+          },
+          {
+            path: 'tonnage-comparison-report',
+            element: <TonnageComparisonReport />
           },
           {
             path: 'import',

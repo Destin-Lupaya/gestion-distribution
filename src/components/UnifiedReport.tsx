@@ -20,7 +20,9 @@ import {
   Alert,
   SelectChangeEvent,
   TablePagination, // Ajout pour la pagination
-  LinearProgress
+  LinearProgress,
+  useMediaQuery,
+  useTheme
 } from '@mui/material';
 import * as XLSX from 'xlsx';
 import { PageTransition } from './PageTransition'; // Supposons que ce composant existe
@@ -34,6 +36,8 @@ const REPORT_TYPES = {
   DISTRIBUTION: 'distribution',
   DAILY: 'daily',
   AGE: 'age',
+  TONNAGE_COMPARISON: 'tonnage_comparison',
+  BATCH_COMMODITY: 'batch_commodity',
 } as const; // as const pour des types plus stricts
 
 type ReportType = typeof REPORT_TYPES[keyof typeof REPORT_TYPES];
@@ -87,6 +91,10 @@ const formatDate = (dateString: string): string => {
 };
 
 const UnifiedReport: React.FC = () => {
+  // Utiliser useTheme et useMediaQuery pour une détection responsive compatible avec tous les navigateurs
+  const theme = useTheme();
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
+  
   const [filters, setFilters] = useState<ReportFilters>({
     startDate: new Date().toISOString().split('T')[0],
     endDate: new Date().toISOString().split('T')[0],
@@ -162,6 +170,12 @@ const UnifiedReport: React.FC = () => {
         case REPORT_TYPES.AGE:
           url = `${API_BASE_URL}/reports/age?${params.toString()}`;
           break;
+        case REPORT_TYPES.TONNAGE_COMPARISON:
+          url = `${API_BASE_URL}/reports/tonnage-comparison?${params.toString()}`;
+          break;
+        case REPORT_TYPES.BATCH_COMMODITY:
+          url = `${API_BASE_URL}/reports/batch-commodity?${params.toString()}`;
+          break;
         default:
           url = `${API_BASE_URL}/reports/distribution?${params.toString()}`;
       }
@@ -208,6 +222,32 @@ const UnifiedReport: React.FC = () => {
               ageGroup: item.ageGroup || 'Non spécifié',
               count: item.count || 0,
               site: item.site || 'Non spécifié'
+            }));
+            break;
+            
+          case REPORT_TYPES.TONNAGE_COMPARISON:
+            processedData = data.map((item, index) => ({
+              id: item.id || `tonnage-${index}`,
+              commodity: item.commodity || 'Non spécifié',
+              scope_tonnage: item.scope_tonnage || 0,
+              waybill_tonnage: item.waybill_tonnage || 0,
+              difference: item.difference || 0,
+              action: item.action || ''
+            }));
+            break;
+            
+          case REPORT_TYPES.BATCH_COMMODITY:
+            processedData = data.map((item, index) => ({
+              id: item.id || `batch-${index}`,
+              activity: item.activity || 'Non spécifié',
+              batchnumber: item.batchnumber || 'Non spécifié',
+              commodity_specific: item.commodity_specific || 'Non spécifié',
+              tonne_sent: item.tonne_sent || 0,
+              mvmt_interne: item.mvmt_interne || 0,
+              tonne_received: item.tonne_received || 0,
+              return_qty: item.return_qty || 0,
+              loss: item.loss || 0,
+              location: item.location || 'Non spécifié'
             }));
             break;
             
@@ -267,6 +307,8 @@ const UnifiedReport: React.FC = () => {
       [REPORT_TYPES.DISTRIBUTION]: 'Distribution',
       [REPORT_TYPES.DAILY]: 'Quotidien',
       [REPORT_TYPES.AGE]: 'Age',
+      [REPORT_TYPES.TONNAGE_COMPARISON]: 'Comparaison Tonnage',
+      [REPORT_TYPES.BATCH_COMMODITY]: 'Commodité par Batch',
     };
 
     const ws = XLSX.utils.json_to_sheet(reportData);
@@ -292,6 +334,26 @@ const UnifiedReport: React.FC = () => {
           { id: 'site', label: 'Site', render: (value) => value || 'Non spécifié' },
           { id: 'count', label: 'Nombre de distributions', numeric: true, render: (value) => value || 0 },
           { id: 'quantite', label: 'Quantité totale', numeric: true, render: (value) => value || 0 },
+        ];
+      case REPORT_TYPES.BATCH_COMMODITY:
+        return [
+          { id: 'activity', label: 'Activité', render: (value) => value || 'Non spécifié' },
+          { id: 'batchnumber', label: 'Batch Number', render: (value) => value || 'Non spécifié' },
+          { id: 'commodity_specific', label: 'Commodité', render: (value) => value || 'Non spécifié' },
+          { id: 'tonne_sent', label: 'Tonne Envoyée', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'mvmt_interne', label: 'Mvmt Interne', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'tonne_received', label: 'Tonne Reçue', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'return_qty', label: 'Retour', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'loss', label: 'Perte', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'location', label: 'Location', render: (value) => value || 'Non spécifié' },
+        ];
+      case REPORT_TYPES.TONNAGE_COMPARISON:
+        return [
+          { id: 'commodity', label: 'Commodité', render: (value) => value || 'Non spécifié' },
+          { id: 'scope_tonnage', label: 'Tonnage Scope (MPOS)', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'waybill_tonnage', label: 'Tonnage Waybill', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'difference', label: 'Différence', numeric: true, render: (value) => value ? Number(value).toFixed(4) : '0.0000' },
+          { id: 'action', label: 'Action', render: (value) => value || '' },
         ];
       case REPORT_TYPES.DISTRIBUTION:
       default:
@@ -461,6 +523,8 @@ const UnifiedReport: React.FC = () => {
                   <MenuItem value={REPORT_TYPES.DISTRIBUTION}>Distribution par site</MenuItem>
                   <MenuItem value={REPORT_TYPES.DAILY}>Distributions quotidiennes</MenuItem>
                   <MenuItem value={REPORT_TYPES.AGE}>Distribution par âge</MenuItem>
+                  <MenuItem value={REPORT_TYPES.TONNAGE_COMPARISON}>Comparaison Tonnage Waybill/MPOS</MenuItem>
+                  <MenuItem value={REPORT_TYPES.BATCH_COMMODITY}>Commodité par Batch</MenuItem>
                 </Select>
               </FormControl>
             </Grid>
@@ -472,7 +536,7 @@ const UnifiedReport: React.FC = () => {
               color="primary"
               onClick={generateReport}
               disabled={loadingReport || loadingSites}
-              fullWidth={window.innerWidth < 600} // Pour le responsive
+              fullWidth={isMobile} // Utilisation de useMediaQuery pour la compatibilité cross-browser
             >
               {loadingReport ? <CircularProgress size={24} color="inherit" /> : 'Générer le rapport'}
             </Button>
@@ -481,7 +545,7 @@ const UnifiedReport: React.FC = () => {
               color="secondary"
               onClick={exportToExcel}
               disabled={reportData.length === 0 || loadingReport}
-              fullWidth={window.innerWidth < 600} // Pour le responsive
+              fullWidth={isMobile} // Utilisation de useMediaQuery pour la compatibilité cross-browser
             >
               Exporter en Excel
             </Button>

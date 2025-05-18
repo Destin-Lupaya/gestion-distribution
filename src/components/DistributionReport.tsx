@@ -5,128 +5,176 @@ import {
   Paper,
   Grid,
   CircularProgress,
-  Alert
+  Alert,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Button,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+  Snackbar
 } from '@mui/material';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
+import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import dayjs from 'dayjs';
 import { PageTransition } from './PageTransition';
-import {
-  Chart as ChartJS,
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend,
-} from 'chart.js';
-import { Bar } from 'react-chartjs-2';
-import toast from 'react-hot-toast';
+import apiService from '../services/apiService';
 
-ChartJS.register(
-  CategoryScale,
-  LinearScale,
-  BarElement,
-  Title,
-  Tooltip,
-  Legend
-);
-
-const options = {
-  responsive: true,
-  plugins: {
-    legend: {
-      position: 'top' as const,
-    },
-    title: {
-      display: true,
-      text: 'Distribution par Site',
-    },
-  },
-  scales: {
-    y: {
-      beginAtZero: true,
-      ticks: {
-        stepSize: 1
-      }
-    }
-  }
-};
-
-interface DistributionData {
-  labels: string[];
-  datasets: {
-    label: string;
-    data: number[];
-    backgroundColor: string;
+// Interface pour les données de distribution
+interface DistributionItem {
+  site: string;
+  beneficiaries: number;
+  households: number;
+  commodities: {
+    name: string;
+    quantity: number;
   }[];
 }
 
 export default function DistributionReport() {
-  const [distributionData, setDistributionData] = useState<DistributionData | null>(null);
-  const [isLoading, setIsLoading] = useState(true);
+  const [startDate, setStartDate] = useState(dayjs().subtract(30, 'day'));
+  const [endDate, setEndDate] = useState(dayjs());
+  const [location, setLocation] = useState('');
+  const [locations, setLocations] = useState<string[]>([]);
+  const [distributionData, setDistributionData] = useState<DistributionItem[]>([]);
+  const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [snackbar, setSnackbar] = useState({
+    open: false,
+    message: '',
+    severity: 'error' as 'error' | 'success' | 'info' | 'warning'
+  });
 
+  // Charger les emplacements disponibles au démarrage
   useEffect(() => {
-    fetchDistributionData();
+    const fetchLocations = async () => {
+      try {
+        const response = await apiService.get('/api/locations');
+        setLocations(response || []);
+      } catch (err) {
+        console.error('Erreur lors du chargement des emplacements:', err);
+        setError('Impossible de charger les emplacements');
+      }
+    };
+
+    fetchLocations();
   }, []);
 
-  const fetchDistributionData = async () => {
+  // Fonction pour générer le rapport
+  const generateReport = async () => {
+    setLoading(true);
+    setError(null);
+
     try {
-      const response = await fetch('http://localhost:3001/api/distribution-stats');
+      const params: Record<string, string> = {
+        startDate: startDate.format('YYYY-MM-DD'),
+        endDate: endDate.format('YYYY-MM-DD')
+      };
       
-      if (!response.ok) {
-        throw new Error('Erreur lors du chargement des données');
+      if (location) {
+        params.location = location;
       }
 
-      const stats = await response.json();
-
-      if (stats && Array.isArray(stats)) {
-        const labels = stats.map(item => item.site_distribution);
-        const distributed = stats.map(item => item.distributed_count);
-        const pending = stats.map(item => item.total_count - item.distributed_count);
-
-        setDistributionData({
-          labels,
-          datasets: [
-            {
-              label: 'Distribué',
-              data: distributed,
-              backgroundColor: 'rgba(75, 192, 192, 0.5)',
-            },
-            {
-              label: 'En attente',
-              data: pending,
-              backgroundColor: 'rgba(255, 99, 132, 0.5)',
-            }
+      // Remplacer par un appel API réel
+      // const response = await apiService.get('/api/reports/distribution', params);
+      
+      // Données simulées pour démonstration
+      const mockData: DistributionItem[] = [
+        {
+          site: 'Site A',
+          beneficiaries: 120,
+          households: 30,
+          commodities: [
+            { name: 'Farine', quantity: 750 },
+            { name: 'Haricot', quantity: 300 },
+            { name: 'Huile', quantity: 150 }
           ]
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching stats:', error);
-      setError('Erreur lors du chargement des données');
-      toast.error('Erreur lors du chargement des données');
+        },
+        {
+          site: 'Site B',
+          beneficiaries: 85,
+          households: 22,
+          commodities: [
+            { name: 'Farine', quantity: 550 },
+            { name: 'Haricot', quantity: 220 },
+            { name: 'Huile', quantity: 110 }
+          ]
+        },
+        {
+          site: 'Site C',
+          beneficiaries: 150,
+          households: 38,
+          commodities: [
+            { name: 'Farine', quantity: 950 },
+            { name: 'Haricot', quantity: 380 },
+            { name: 'Huile', quantity: 190 }
+          ]
+        }
+      ];
+      
+      // Simuler un délai d'API
+      await new Promise(resolve => setTimeout(resolve, 500));
+      
+      setDistributionData(mockData);
+      setSnackbar({
+        open: true,
+        message: 'Rapport généré avec succès',
+        severity: 'success'
+      });
+    } catch (err) {
+      console.error('Erreur lors de la génération du rapport:', err);
+      setError('Impossible de générer le rapport de distribution');
+      setSnackbar({
+        open: true,
+        message: 'Erreur lors de la génération du rapport',
+        severity: 'error'
+      });
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
   };
 
-  if (isLoading) {
-    return (
-      <PageTransition>
-        <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
-          <CircularProgress />
-        </Box>
-      </PageTransition>
-    );
-  }
+  // Calculer les totaux
+  const calculateTotals = () => {
+    if (distributionData.length === 0) return {
+      beneficiaries: 0,
+      households: 0,
+      commodities: {}
+    };
 
-  if (error) {
-    return (
-      <PageTransition>
-        <Box sx={{ p: 3 }}>
-          <Alert severity="error">{error}</Alert>
-        </Box>
-      </PageTransition>
-    );
-  }
+    const totals = {
+      beneficiaries: 0,
+      households: 0,
+      commodities: {} as Record<string, number>
+    };
+
+    distributionData.forEach(item => {
+      totals.beneficiaries += item.beneficiaries;
+      totals.households += item.households;
+      
+      item.commodities.forEach(commodity => {
+        if (!totals.commodities[commodity.name]) {
+          totals.commodities[commodity.name] = 0;
+        }
+        totals.commodities[commodity.name] += commodity.quantity;
+      });
+    });
+
+    return totals;
+  };
+
+  const totals = calculateTotals();
+
+  // Fermer le snackbar
+  const handleCloseSnackbar = () => {
+    setSnackbar({ ...snackbar, open: false });
+  };
 
   return (
     <PageTransition>
@@ -134,13 +182,174 @@ export default function DistributionReport() {
         <Typography variant="h4" gutterBottom>
           Rapport de Distribution
         </Typography>
-        <Paper sx={{ p: 2 }}>
-          <Grid container spacing={3}>
-            <Grid item xs={12}>
-              {distributionData && <Bar options={options} data={distributionData} />}
+        
+        <Paper elevation={3} sx={{ p: 3, mb: 4 }}>
+          <Grid container spacing={3} alignItems="center">
+            <Grid item xs={12} sm={6} md={3}>
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <DatePicker
+                  label="Date de début"
+                  value={startDate}
+                  onChange={(newValue) => setStartDate(newValue || dayjs())}
+                  slotProps={{ textField: { fullWidth: true } }}
+                />
+              </LocalizationProvider>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <LocalizationProvider dateAdapter={AdapterDayjs}>
+                <DatePicker
+                  label="Date de fin"
+                  value={endDate}
+                  onChange={(newValue) => setEndDate(newValue || dayjs())}
+                  slotProps={{ textField: { fullWidth: true } }}
+                />
+              </LocalizationProvider>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <FormControl fullWidth>
+                <InputLabel>Emplacement</InputLabel>
+                <Select
+                  value={location}
+                  onChange={(e) => setLocation(e.target.value)}
+                  label="Emplacement"
+                >
+                  <MenuItem value="">Tous les emplacements</MenuItem>
+                  {locations.map((loc) => (
+                    <MenuItem key={loc} value={loc}>{loc}</MenuItem>
+                  ))}
+                </Select>
+              </FormControl>
+            </Grid>
+            <Grid item xs={12} sm={6} md={3}>
+              <Button
+                variant="contained"
+                color="primary"
+                fullWidth
+                onClick={generateReport}
+                disabled={loading}
+              >
+                {loading ? <CircularProgress size={24} /> : 'Générer le rapport'}
+              </Button>
             </Grid>
           </Grid>
         </Paper>
+
+        {error && (
+          <Alert severity="error" sx={{ mb: 3 }}>
+            {error}
+          </Alert>
+        )}
+
+        {distributionData.length > 0 && (
+          <>
+            <Paper elevation={3} sx={{ mb: 4 }}>
+              <TableContainer>
+                <Table>
+                  <TableHead>
+                    <TableRow>
+                      <TableCell>Site</TableCell>
+                      <TableCell align="right">Bénéficiaires</TableCell>
+                      <TableCell align="right">Ménages</TableCell>
+                      <TableCell>Commodités</TableCell>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {distributionData.map((item, index) => (
+                      <TableRow key={index}>
+                        <TableCell component="th" scope="row">
+                          {item.site}
+                        </TableCell>
+                        <TableCell align="right">{item.beneficiaries}</TableCell>
+                        <TableCell align="right">{item.households}</TableCell>
+                        <TableCell>
+                          {item.commodities.map((commodity, idx) => (
+                            <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                              <Typography variant="body2">{commodity.name}:</Typography>
+                              <Typography variant="body2" fontWeight="bold">{commodity.quantity}</Typography>
+                            </Box>
+                          ))}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    <TableRow sx={{ backgroundColor: 'rgba(0, 0, 0, 0.04)' }}>
+                      <TableCell component="th" scope="row">
+                        <Typography fontWeight="bold">TOTAL</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography fontWeight="bold">{totals.beneficiaries}</Typography>
+                      </TableCell>
+                      <TableCell align="right">
+                        <Typography fontWeight="bold">{totals.households}</Typography>
+                      </TableCell>
+                      <TableCell>
+                        {Object.entries(totals.commodities).map(([name, quantity], idx) => (
+                          <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                            <Typography variant="body2">{name}:</Typography>
+                            <Typography variant="body2" fontWeight="bold">{quantity}</Typography>
+                          </Box>
+                        ))}
+                      </TableCell>
+                    </TableRow>
+                  </TableBody>
+                </Table>
+              </TableContainer>
+            </Paper>
+
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Paper elevation={3} sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Statistiques Globales
+                  </Typography>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography>Total des bénéficiaires:</Typography>
+                    <Typography fontWeight="bold">{totals.beneficiaries}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography>Total des ménages:</Typography>
+                    <Typography fontWeight="bold">{totals.households}</Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                    <Typography>Ratio bénéficiaires/ménages:</Typography>
+                    <Typography fontWeight="bold">
+                      {totals.households > 0 ? (totals.beneficiaries / totals.households).toFixed(2) : 'N/A'}
+                    </Typography>
+                  </Box>
+                </Paper>
+              </Grid>
+              <Grid item xs={12} md={6}>
+                <Paper elevation={3} sx={{ p: 3 }}>
+                  <Typography variant="h6" gutterBottom>
+                    Commodités Distribuées
+                  </Typography>
+                  {Object.entries(totals.commodities).map(([name, quantity], idx) => (
+                    <Box key={idx} sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography>{name}:</Typography>
+                      <Typography fontWeight="bold">{quantity}</Typography>
+                    </Box>
+                  ))}
+                </Paper>
+              </Grid>
+            </Grid>
+          </>
+        )}
+
+        {!loading && distributionData.length === 0 && !error && (
+          <Alert severity="info">
+            Veuillez sélectionner une période et générer le rapport pour voir les données de distribution.
+          </Alert>
+        )}
+
+        <Snackbar
+          open={snackbar.open}
+          autoHideDuration={6000}
+          onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        >
+          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+            {snackbar.message}
+          </Alert>
+        </Snackbar>
       </Box>
     </PageTransition>
   );
