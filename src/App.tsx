@@ -19,6 +19,9 @@ import UserProfile from './components/UserProfile';
 import Unauthorized from './components/Unauthorized';
 import ProtectedRoute from './components/ProtectedRoute';
 import BeneficiaireSearch from './pages/BeneficiaireSearch';
+import ProgrammeAide from './components/ProgrammeAide';
+import CalendrierDistribution from './components/CalendrierDistribution';
+import AssistancesDistribuees from './components/AssistancesDistribuees';
 import { AnimatePresence } from 'framer-motion';
 import { ThemeProvider, CssBaseline, Box } from '@mui/material';
 import { theme } from './theme';
@@ -99,10 +102,31 @@ const router = createBrowserRouter([
       },
       // Routes protégées pour les coordinateurs et administrateurs
       {
+        element: <ProtectedRoute allowedRoles={['admin', 'manager']} />,
+        children: [
+          {
+            path: 'programmes-aide',
+            element: <ProgrammeAide />
+          },
+          {
+            path: 'calendrier-distribution',
+            element: <CalendrierDistribution />
+          },
+          {
+            path: 'assistances-distribuees',
+            element: <AssistancesDistribuees />
+          },
+        ]
+      },
+      {
         element: <ProtectedRoute allowedRoles={['admin', 'manager', 'monitoring']} />,
         children: [
           {
             path: 'rapport',
+            element: <UnifiedReport />
+          },
+          {
+            path: 'unified-report',
             element: <UnifiedReport />
           },
           {

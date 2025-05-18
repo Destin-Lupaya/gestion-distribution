@@ -8,6 +8,8 @@ import DrawIcon from '@mui/icons-material/Draw';
 import PendingActionsIcon from '@mui/icons-material/PendingActions';
 import AssessmentIcon from '@mui/icons-material/Assessment';
 import RestaurantIcon from '@mui/icons-material/Restaurant';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import BarChartIcon from '@mui/icons-material/BarChart';
 
 const FeatureCard = styled(Paper)(({ theme }) => ({
   height: '100%',
@@ -118,6 +120,52 @@ const HomePage: React.FC = () => {
                 sx={{ alignSelf: 'flex-start' }}
               >
                 Voir les rapports
+              </Button>
+            </FeatureCard>
+          </Grid>
+
+          <Grid item xs={12} md={6}>
+            <FeatureCard>
+              <IconWrapper>
+                <CalendarMonthIcon fontSize="large" />
+              </IconWrapper>
+              <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
+                Calendrier de Distribution
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 3, flexGrow: 1 }}>
+                Planifiez et gérez les événements de distribution à l'aide d'un calendrier interactif pour une meilleure organisation.
+              </Typography>
+              <Button 
+                component={Link} 
+                to="/app/calendrier-distribution" 
+                variant="outlined" 
+                color="primary"
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Accéder au calendrier
+              </Button>
+            </FeatureCard>
+          </Grid>
+          
+          <Grid item xs={12} md={6}>
+            <FeatureCard>
+              <IconWrapper>
+                <BarChartIcon fontSize="large" />
+              </IconWrapper>
+              <Typography variant="h5" component="h3" gutterBottom sx={{ fontWeight: 600 }}>
+                Rapports Unifiés
+              </Typography>
+              <Typography variant="body1" sx={{ mb: 3, flexGrow: 1 }}>
+                Consultez des rapports consolidés avec des visualisations avancées pour une analyse approfondie des distributions.
+              </Typography>
+              <Button 
+                component={Link} 
+                to="/app/unified-report" 
+                variant="outlined" 
+                color="primary"
+                sx={{ alignSelf: 'flex-start' }}
+              >
+                Voir les rapports unifiés
               </Button>
             </FeatureCard>
           </Grid>

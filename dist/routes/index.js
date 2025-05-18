@@ -8,9 +8,112 @@ const promise_1 = __importDefault(require("mysql2/promise"));
 const uuid_1 = require("uuid");
 const db_1 = require("../lib/db");
 const nutritionRoutes_1 = __importDefault(require("./nutritionRoutes"));
+const evenementsRoutes_1 = __importDefault(require("./evenementsRoutes"));
 const router = (0, express_1.Router)();
+
 // Mount nutrition routes
 router.use('/nutrition', nutritionRoutes_1.default);
+
+// Mount événements de distribution routes
+router.use('/evenements-distribution', evenementsRoutes_1.default);
+
+// Endpoint de compatibilité pour /api/register-beneficiary qui redirige vers /api/nutrition/register-beneficiary
+router.post('/register-beneficiary', async (req, res) => {
+    try {
+        console.log('Redirection de /api/register-beneficiary vers /api/nutrition/register-beneficiary');
+        // Utiliser le même corps de requête et rediriger vers l'endpoint nutrition
+        const { numero_enregistrement, nom_enfant, nom_mere, age_mois, sexe, province, territoire, partenaire, village, site_cs } = req.body;
+        
+        // Create database connection
+        const connection = await promise_1.default.createConnection({
+            host: process.env.DB_HOST || 'localhost',
+            user: process.env.DB_USER || 'root',
+            password: process.env.DB_PASSWORD || '',
+            database: process.env.DB_NAME || 'gestion_distribution',
+            port: parseInt(process.env.DB_PORT || '3306', 10)
+        });
+        
+        // Start transaction
+        await connection.beginTransaction();
+        try {
+            // Generate UUID for the beneficiary
+            const beneficiaireId = (0, uuid_1.v4)();
+            
+            // Insert beneficiary
+            await connection.execute(`INSERT INTO nutrition_beneficiaires (
+                id, 
+                numero_enregistrement, 
+                nom_enfant, 
+                nom_mere, 
+                age_mois, 
+                sexe, 
+                province, 
+                territoire, 
+                partenaire, 
+                village, 
+                site_cs
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`, [
+                beneficiaireId,
+                numero_enregistrement,
+                nom_enfant,
+                nom_mere,
+                age_mois,
+                sexe,
+                province,
+                territoire,
+                partenaire,
+                village,
+                site_cs
+            ]);
+            
+            // Generate a ration card number
+            const numeroRation = `NUT-${Math.floor(Math.random() * 10000).toString().padStart(4, '0')}`;
+            
+            // Calculate dates (e.g., 6 months program)
+            const dateDebut = new Date();
+            const dateFin = new Date();
+            dateFin.setMonth(dateFin.getMonth() + 6);
+            
+            // Insert ration
+            await connection.execute(`INSERT INTO nutrition_rations (
+                id, 
+                beneficiaire_id, 
+                numero_carte, 
+                date_debut, 
+                date_fin, 
+                statut
+            ) VALUES (?, ?, ?, ?, ?, ?)`, [
+                (0, uuid_1.v4)(),
+                beneficiaireId,
+                numeroRation,
+                dateDebut.toISOString().split('T')[0],
+                dateFin.toISOString().split('T')[0],
+                'ACTIF'
+            ]);
+            
+            // Commit transaction
+            await connection.commit();
+            
+            res.status(201).json({
+                success: true,
+                message: 'Bénéficiaire enregistré avec succès',
+                beneficiaire_id: beneficiaireId
+            });
+        }
+        catch (error) {
+            // Rollback transaction on error
+            await connection.rollback();
+            throw error;
+        }
+        finally {
+            await connection.end();
+        }
+    }
+    catch (error) {
+        console.error('Error registering beneficiary:', error);
+        res.status(500).json({ error: String(error) });
+    }
+});
 // Health check endpoint
 router.get('/health', async (_req, res) => {
     try {

@@ -3,11 +3,23 @@ import mysql from 'mysql2/promise';
 import { v4 as uuidv4 } from 'uuid';
 import { dbOperations } from '../lib/db';
 import nutritionRoutes from './nutritionRoutes';
+import programmesRoutes from './programmesRoutes';
+import evenementsRoutes from './evenementsRoutes';
+import assistancesRoutes from './assistancesRoutes';
 
 const router = Router();
 
 // Mount nutrition routes
 router.use('/nutrition', nutritionRoutes);
+
+// Mount programmes d'aide routes
+router.use('/programmes', programmesRoutes);
+
+// Mount événements de distribution routes
+router.use('/evenements-distribution', evenementsRoutes);
+
+// Mount assistances distribuées routes
+router.use('/assistances-distribuees', assistancesRoutes);
 
 // Health check endpoint
 router.get('/health', async (_req: Request, res: Response) => {

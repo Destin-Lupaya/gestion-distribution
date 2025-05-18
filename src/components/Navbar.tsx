@@ -28,6 +28,11 @@ import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
 import SearchIcon from '@mui/icons-material/Search';
+import EventIcon from '@mui/icons-material/Event';
+import InventoryIcon from '@mui/icons-material/Inventory';
+import PeopleIcon from '@mui/icons-material/People';
+import CalendarMonthIcon from '@mui/icons-material/CalendarMonth';
+import BarChartIcon from '@mui/icons-material/BarChart';
 
 import { useAuth } from '../contexts/AuthContext';
 import wfpLogo from '../assets/wfp-logo.svg';
@@ -39,6 +44,8 @@ function Navbar() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const [regMenuAnchor, setRegMenuAnchor] = useState<null | HTMLElement>(null);
   const [distMenuAnchor, setDistMenuAnchor] = useState<null | HTMLElement>(null);
+  const [reportMenuAnchor, setReportMenuAnchor] = useState<null | HTMLElement>(null);
+  const [advancedMenuAnchor, setAdvancedMenuAnchor] = useState<null | HTMLElement>(null);
 
   const isActive = (path: string) => location.pathname === path;
 
@@ -251,11 +258,11 @@ function Navbar() {
               </Menu>
             </Box>
             
-            {/* Menu Distribution combiné avec dropdown */}
+            {/* Menu Signatures et Distributions */}
             <Box sx={{ position: 'relative', mx: 1 }}>
               <Button
                 sx={{
-                  color: isActive('/nutrition-distribution') || isActive('/signatures') || isActive('/pending-distributions') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
+                  color: isActive('/app/signatures') || isActive('/app/pending-distributions') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
                   fontWeight: 600,
                   padding: '8px 12px',
                   textTransform: 'none',
@@ -270,17 +277,17 @@ function Navbar() {
                 endIcon={<span style={{ fontSize: '0.7rem', marginLeft: '2px' }}>▼</span>}
               >
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <LocalDiningIcon sx={{ 
-                    color: isActive('/app/nutrition-distribution') || isActive('/app/signatures') || isActive('/app/pending-distributions') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
+                  <DrawIcon sx={{ 
+                    color: isActive('/app/signatures') || isActive('/app/pending-distributions') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
                     transition: 'color 0.2s ease-in-out',
                     fontSize: '1.1rem',
                     marginRight: '4px'
                   }} />
-                  Distribution
+                  Distributions
                 </Box>
-                {(isActive('/app/nutrition-distribution') || isActive('/app/signatures') || isActive('/app/pending-distributions')) && (
+                {(isActive('/app/signatures') || isActive('/app/pending-distributions')) && (
                   <motion.div
-                    layoutId="activeIndicator2"
+                    layoutId="activeIndicator"
                     style={{
                       position: 'absolute',
                       bottom: 0,
@@ -300,48 +307,38 @@ function Navbar() {
                 onClose={() => setDistMenuAnchor(null)}
                 sx={{ mt: 1 }}
               >
-                <MenuItem 
-                  component={Link} 
-                  to="/app/signatures" 
-                  onClick={() => setDistMenuAnchor(null)}
-                  sx={{ 
-                    color: isActive('/app/signatures') ? 'primary.main' : 'inherit',
-                    fontWeight: isActive('/app/signatures') ? 600 : 400
-                  }}
-                >
-                  <ListItemIcon>
-                    <DrawIcon fontSize="small" color={isActive('/signatures') ? "primary" : "inherit"} />
-                  </ListItemIcon>
-                  <Typography>Collecte de Signatures</Typography>
-                </MenuItem>
-                <MenuItem 
-                  component={Link} 
-                  to="/app/recherche-beneficiaires" 
-                  onClick={() => setDistMenuAnchor(null)}
-                  sx={{ 
-                    color: isActive('/app/recherche-beneficiaires') ? 'primary.main' : 'inherit',
-                    fontWeight: isActive('/app/recherche-beneficiaires') ? 600 : 400
-                  }}
-                >
-                  <ListItemIcon>
-                    <SearchIcon fontSize="small" color={isActive('/recherche-beneficiaires') ? "primary" : "inherit"} />
-                  </ListItemIcon>
-                  <Typography>Recherche de Bénéficiaires</Typography>
-                </MenuItem>
-                <MenuItem 
-                  component={Link} 
-                  to="/app/pending-distributions" 
-                  onClick={() => setDistMenuAnchor(null)}
-                  sx={{ 
-                    color: isActive('/app/pending-distributions') ? 'primary.main' : 'inherit',
-                    fontWeight: isActive('/app/pending-distributions') ? 600 : 400
-                  }}
-                >
-                  <ListItemIcon>
-                    <PendingActionsIcon fontSize="small" color={isActive('/pending-distributions') ? "primary" : "inherit"} />
-                  </ListItemIcon>
-                  <Typography>Approbations</Typography>
-                </MenuItem>
+                {user?.roles?.includes('field') && (
+                  <MenuItem 
+                    component={Link} 
+                    to="/app/signatures" 
+                    onClick={() => setDistMenuAnchor(null)}
+                    sx={{ 
+                      color: isActive('/app/signatures') ? 'primary.main' : 'inherit',
+                      fontWeight: isActive('/app/signatures') ? 600 : 400
+                    }}
+                  >
+                    <ListItemIcon>
+                      <DrawIcon fontSize="small" color={isActive('/app/signatures') ? 'primary' : 'inherit'} />
+                    </ListItemIcon>
+                    Collecte de signatures
+                  </MenuItem>
+                )}
+                {user?.roles?.includes('distribution') && (
+                  <MenuItem 
+                    component={Link} 
+                    to="/app/pending-distributions" 
+                    onClick={() => setDistMenuAnchor(null)}
+                    sx={{ 
+                      color: isActive('/app/pending-distributions') ? 'primary.main' : 'inherit',
+                      fontWeight: isActive('/app/pending-distributions') ? 600 : 400
+                    }}
+                  >
+                    <ListItemIcon>
+                      <PendingActionsIcon fontSize="small" color={isActive('/app/pending-distributions') ? 'primary' : 'inherit'} />
+                    </ListItemIcon>
+                    Distributions en attente
+                  </MenuItem>
+                )}
                 <MenuItem 
                   component={Link} 
                   to="/app/nutrition-distribution" 
@@ -356,10 +353,212 @@ function Navbar() {
                   </ListItemIcon>
                   <Typography>Distribution Nutrition</Typography>
                 </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/calendrier-distribution" 
+                  onClick={() => setDistMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/calendrier-distribution') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/calendrier-distribution') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <CalendarMonthIcon fontSize="small" color={isActive('/app/calendrier-distribution') ? "primary" : "inherit"} />
+                  </ListItemIcon>
+                  <Typography>Calendrier de distribution</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/unified-report" 
+                  onClick={() => setDistMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/unified-report') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/unified-report') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <BarChartIcon fontSize="small" color={isActive('/app/unified-report') ? "primary" : "inherit"} />
+                  </ListItemIcon>
+                  <Typography>Rapports Unifiés</Typography>
+                </MenuItem>
               </Menu>
             </Box>
             
-            <NavButton to="/app/rapport" icon={<AssessmentIcon />} label="Rapport" />
+            {/* Menu Rapports */}
+            <Box sx={{ position: 'relative', mx: 1 }}>
+              <Button
+                sx={{
+                  color: isActive('/app/rapport') || isActive('/app/unified-report') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
+                  fontWeight: 600,
+                  padding: '8px 12px',
+                  textTransform: 'none',
+                  fontSize: '0.9rem',
+                  letterSpacing: '0.3px',
+                  '&:hover': {
+                    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                    color: '#FFFFFF',
+                  },
+                }}
+                onClick={(e) => setReportMenuAnchor(e.currentTarget)}
+                endIcon={<span style={{ fontSize: '0.7rem', marginLeft: '2px' }}>▼</span>}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AssessmentIcon sx={{ 
+                    color: isActive('/app/rapport') || isActive('/app/unified-report') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
+                    transition: 'color 0.2s ease-in-out',
+                    fontSize: '1.1rem',
+                    marginRight: '4px'
+                  }} />
+                  Rapports
+                </Box>
+                {(isActive('/app/rapport') || isActive('/app/unified-report')) && (
+                  <motion.div
+                    layoutId="activeIndicator3"
+                    style={{
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: 3,
+                      backgroundColor: '#ffffff',
+                      borderRadius: '3px 3px 0 0',
+                    }}
+                    transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                  />
+                )}
+              </Button>
+              <Menu
+                anchorEl={reportMenuAnchor}
+                open={Boolean(reportMenuAnchor)}
+                onClose={() => setReportMenuAnchor(null)}
+                sx={{ mt: 1 }}
+              >
+                <MenuItem 
+                  component={Link} 
+                  to="/app/rapport" 
+                  onClick={() => setReportMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/rapport') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/rapport') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <AssessmentIcon fontSize="small" color={isActive('/app/rapport') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  <Typography>Rapport Standard</Typography>
+                </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/unified-report" 
+                  onClick={() => setReportMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/unified-report') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/unified-report') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <BarChartIcon fontSize="small" color={isActive('/app/unified-report') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  <Typography>Rapports Unifiés</Typography>
+                </MenuItem>
+              </Menu>
+            </Box>
+            
+            {/* Menu Gestion Avancée des Distributions */}
+            {(user?.roles?.includes('admin') || user?.roles?.includes('manager')) && (
+              <Box sx={{ position: 'relative', mx: 1 }}>
+                <Button
+                  sx={{
+                    color: isActive('/app/programmes-aide') || isActive('/app/calendrier-distribution') || isActive('/app/assistances-distribuees') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
+                    fontWeight: 600,
+                    padding: '8px 12px',
+                    textTransform: 'none',
+                    fontSize: '0.9rem',
+                    letterSpacing: '0.3px',
+                    '&:hover': {
+                      backgroundColor: 'rgba(255, 255, 255, 0.15)',
+                      color: '#FFFFFF',
+                    },
+                  }}
+                  onClick={(e) => setAdvancedMenuAnchor(e.currentTarget)}
+                  endIcon={<span style={{ fontSize: '0.7rem', marginLeft: '2px' }}>▼</span>}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <EventIcon sx={{ 
+                      color: isActive('/app/programmes-aide') || isActive('/app/calendrier-distribution') || isActive('/app/assistances-distribuees') ? '#FFFFFF' : 'rgba(255, 255, 255, 0.85)',
+                      transition: 'color 0.2s ease-in-out',
+                      fontSize: '1.1rem',
+                      marginRight: '4px'
+                    }} />
+                    Gestion Avancée
+                  </Box>
+                  {(isActive('/app/programmes-aide') || isActive('/app/calendrier-distribution') || isActive('/app/assistances-distribuees')) && (
+                    <motion.div
+                      layoutId="activeIndicator2"
+                      style={{
+                        position: 'absolute',
+                        bottom: 0,
+                        left: 0,
+                        right: 0,
+                        height: 3,
+                        backgroundColor: '#ffffff',
+                        borderRadius: '3px 3px 0 0',
+                      }}
+                      transition={{ type: 'spring', stiffness: 380, damping: 30 }}
+                    />
+                  )}
+                </Button>
+                <Menu
+                  anchorEl={advancedMenuAnchor}
+                  open={Boolean(advancedMenuAnchor)}
+                  onClose={() => setAdvancedMenuAnchor(null)}
+                  sx={{ mt: 1 }}
+                >
+                  <MenuItem 
+                    component={Link} 
+                    to="/app/programmes-aide" 
+                    onClick={() => setAdvancedMenuAnchor(null)}
+                    sx={{ 
+                      color: isActive('/app/programmes-aide') ? 'primary.main' : 'inherit',
+                      fontWeight: isActive('/app/programmes-aide') ? 600 : 400
+                    }}
+                  >
+                    <ListItemIcon>
+                      <InventoryIcon fontSize="small" color={isActive('/app/programmes-aide') ? 'primary' : 'inherit'} />
+                    </ListItemIcon>
+                    <Typography>Programmes d'aide</Typography>
+                  </MenuItem>
+                  <MenuItem 
+                    component={Link} 
+                    to="/app/calendrier-distribution" 
+                    onClick={() => setAdvancedMenuAnchor(null)}
+                    sx={{ 
+                      color: isActive('/app/calendrier-distribution') ? 'primary.main' : 'inherit',
+                      fontWeight: isActive('/app/calendrier-distribution') ? 600 : 400
+                    }}
+                  >
+                    <ListItemIcon>
+                      <CalendarMonthIcon fontSize="small" color={isActive('/app/calendrier-distribution') ? 'primary' : 'inherit'} />
+                    </ListItemIcon>
+                    <Typography>Calendrier de distribution</Typography>
+                  </MenuItem>
+                  <MenuItem 
+                    component={Link} 
+                    to="/app/assistances-distribuees" 
+                    onClick={() => setAdvancedMenuAnchor(null)}
+                    sx={{ 
+                      color: isActive('/app/assistances-distribuees') ? 'primary.main' : 'inherit',
+                      fontWeight: isActive('/app/assistances-distribuees') ? 600 : 400
+                    }}
+                  >
+                    <ListItemIcon>
+                      <PeopleIcon fontSize="small" color={isActive('/app/assistances-distribuees') ? 'primary' : 'inherit'} />
+                    </ListItemIcon>
+                    <Typography>Suivi des assistances</Typography>
+                  </MenuItem>
+                </Menu>
+              </Box>
+            )}
             
             {user ? (
               <Box sx={{ ml: 2 }}>
