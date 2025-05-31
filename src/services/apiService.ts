@@ -83,52 +83,220 @@ class ApiService {
    * Méthode pour effectuer un appel POST
    * @param endpoint - L'endpoint API à appeler
    * @param data - Les données à envoyer
+   * @param timeoutMs - Délai d'expiration en millisecondes (par défaut: 10000ms)
    * @returns La réponse de l'API
    */
-  async post(endpoint: string, data: any) {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
+  async post(endpoint: string, data: any, timeoutMs: number = 10000) {
+    const url = `${this.baseUrl}${endpoint}`;
     
-    return response.json();
+    // Implémenter un timeout pour éviter les attentes infinies
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      console.log(`API Call: POST ${url}`);
+      const startTime = Date.now();
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal
+      });
+      
+      // Annuler le timeout car la requête a réussi
+      clearTimeout(timeoutId);
+      
+      const endTime = Date.now();
+      console.log(`API Response: POST ${url} - Status: ${response.status} - Time: ${endTime - startTime}ms`);
+      
+      if (!response.ok) {
+        // Si la réponse n'est pas OK, vérifier si c'est du HTML ou du JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          const htmlContent = await response.text();
+          console.error(`API Error: Received HTML instead of JSON`, htmlContent.substring(0, 200) + '...');
+          throw new Error(`API Error: ${response.status} ${response.statusText} - Received HTML instead of JSON`);
+        } else {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+      }
+      
+      try {
+        const data = await response.json();
+        return data;
+      } catch (jsonError) {
+        console.error(`API Error: Failed to parse JSON response`, jsonError);
+        const textContent = await response.text();
+        console.error(`Raw response:`, textContent.substring(0, 200) + '...');
+        throw new Error(`API Error: Failed to parse JSON response - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}`);
+      }
+    } catch (error: unknown) {
+      // Annuler le timeout en cas d'erreur
+      clearTimeout(timeoutId);
+      
+      // Gérer spécifiquement les erreurs d'abandon
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`API Timeout: POST ${url} - Request aborted after ${timeoutMs}ms`);
+        throw new Error(`La requête a pris trop de temps et a été annulée. Veuillez réessayer.`);
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      console.error(`API Error: POST ${url} - ${errorMessage}`);
+      throw error;
+    }
   }
 
   /**
    * Méthode pour effectuer un appel PUT
    * @param endpoint - L'endpoint API à appeler
    * @param data - Les données à envoyer
+   * @param timeoutMs - Délai d'expiration en millisecondes (par défaut: 10000ms)
    * @returns La réponse de l'API
    */
-  async put(endpoint: string, data: any) {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json'
-      },
-      body: JSON.stringify(data)
-    });
+  async put(endpoint: string, data: any, timeoutMs: number = 10000) {
+    const url = `${this.baseUrl}${endpoint}`;
     
-    return response.json();
+    // Implémenter un timeout pour éviter les attentes infinies
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      console.log(`API Call: PUT ${url}`);
+      const startTime = Date.now();
+      
+      const response = await fetch(url, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        body: JSON.stringify(data),
+        signal: controller.signal
+      });
+      
+      // Annuler le timeout car la requête a réussi
+      clearTimeout(timeoutId);
+      
+      const endTime = Date.now();
+      console.log(`API Response: PUT ${url} - Status: ${response.status} - Time: ${endTime - startTime}ms`);
+      
+      if (!response.ok) {
+        // Si la réponse n'est pas OK, vérifier si c'est du HTML ou du JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          const htmlContent = await response.text();
+          console.error(`API Error: Received HTML instead of JSON`, htmlContent.substring(0, 200) + '...');
+          throw new Error(`API Error: ${response.status} ${response.statusText} - Received HTML instead of JSON`);
+        } else {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+      }
+      
+      try {
+        const data = await response.json();
+        return data;
+      } catch (jsonError) {
+        console.error(`API Error: Failed to parse JSON response`, jsonError);
+        const textContent = await response.text();
+        console.error(`Raw response:`, textContent.substring(0, 200) + '...');
+        throw new Error(`API Error: Failed to parse JSON response - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}`);
+      }
+    } catch (error: unknown) {
+      // Annuler le timeout en cas d'erreur
+      clearTimeout(timeoutId);
+      
+      // Gérer spécifiquement les erreurs d'abandon
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`API Timeout: PUT ${url} - Request aborted after ${timeoutMs}ms`);
+        throw new Error(`La requête a pris trop de temps et a été annulée. Veuillez réessayer.`);
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      console.error(`API Error: PUT ${url} - ${errorMessage}`);
+      throw error;
+    }
   }
 
   /**
    * Méthode pour effectuer un appel DELETE
    * @param endpoint - L'endpoint API à appeler
+   * @param timeoutMs - Délai d'expiration en millisecondes (par défaut: 10000ms)
    * @returns La réponse de l'API
    */
-  async delete(endpoint: string) {
-    const response = await fetch(`${this.baseUrl}${endpoint}`, {
-      method: 'DELETE',
-      headers: {
-        'Content-Type': 'application/json'
-      }
-    });
+  async delete(endpoint: string, timeoutMs: number = 10000) {
+    const url = `${this.baseUrl}${endpoint}`;
     
-    return response.json();
+    // Implémenter un timeout pour éviter les attentes infinies
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+    
+    try {
+      console.log(`API Call: DELETE ${url}`);
+      const startTime = Date.now();
+      
+      const response = await fetch(url, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+          'Accept': 'application/json'
+        },
+        signal: controller.signal
+      });
+      
+      // Annuler le timeout car la requête a réussi
+      clearTimeout(timeoutId);
+      
+      const endTime = Date.now();
+      console.log(`API Response: DELETE ${url} - Status: ${response.status} - Time: ${endTime - startTime}ms`);
+      
+      if (!response.ok) {
+        // Si la réponse n'est pas OK, vérifier si c'est du HTML ou du JSON
+        const contentType = response.headers.get('content-type');
+        if (contentType && contentType.includes('text/html')) {
+          const htmlContent = await response.text();
+          console.error(`API Error: Received HTML instead of JSON`, htmlContent.substring(0, 200) + '...');
+          throw new Error(`API Error: ${response.status} ${response.statusText} - Received HTML instead of JSON`);
+        } else {
+          throw new Error(`API Error: ${response.status} ${response.statusText}`);
+        }
+      }
+      
+      // Pour les requêtes DELETE, la réponse peut être vide
+      if (response.headers.get('content-length') === '0') {
+        return { success: true };
+      }
+      
+      try {
+        const data = await response.json();
+        return data;
+      } catch (jsonError) {
+        console.error(`API Error: Failed to parse JSON response`, jsonError);
+        const textContent = await response.text();
+        if (!textContent) {
+          // Si la réponse est vide, on considère que c'est un succès
+          return { success: true };
+        }
+        console.error(`Raw response:`, textContent.substring(0, 200) + '...');
+        throw new Error(`API Error: Failed to parse JSON response - ${jsonError instanceof Error ? jsonError.message : 'Unknown error'}`);
+      }
+    } catch (error: unknown) {
+      // Annuler le timeout en cas d'erreur
+      clearTimeout(timeoutId);
+      
+      // Gérer spécifiquement les erreurs d'abandon
+      if (error instanceof Error && error.name === 'AbortError') {
+        console.error(`API Timeout: DELETE ${url} - Request aborted after ${timeoutMs}ms`);
+        throw new Error(`La requête a pris trop de temps et a été annulée. Veuillez réessayer.`);
+      }
+      
+      const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+      console.error(`API Error: DELETE ${url} - ${errorMessage}`);
+      throw error;
+    }
   }
 
   /**

@@ -36,36 +36,44 @@ import apiService from '../services/apiService';
 
 // Interface pour les données du waybill
 interface WaybillItem {
-  id?: number;
-  waybill_number: string;
-  batchnumber: string;
-  commodity_specific: string;
-  type: string;
-  quantity_sent: number;
-  unit_sent: string;
-  tonne_sent: number;
-  quantity: number;
-  unit_received: string;
-  tonne_received: number;
-  obs: string;
-  loss: number;
-  mount_in: number;
-  return_qty: number;
-  activity: string;
-  date: string;
-  location: string;
+  id?: number | string;
+  waybill_number?: string;
+  batchnumber?: string;
+  batch_number?: string;
+  commodity?: string;
+  commodity_specific?: string;
+  type?: string;
+  quantity_sent?: number;
+  unit_sent?: string;
+  tonne_sent?: number;
+  quantity?: number;
+  unit?: string;
+  unit_received?: string;
+  tonne_received?: number;
+  obs?: string;
+  loss?: number;
+  mount_in?: number;
+  return_qty?: number;
+  activity?: string;
+  date?: string;
+  reception_date?: string;
+  location?: string;
+  status?: string;
 }
 
 // Valeurs initiales pour un nouvel élément
 const initialWaybillItem: WaybillItem = {
   waybill_number: '',
   batchnumber: '',
+  batch_number: '',
+  commodity: '',
   commodity_specific: '',
-  type: '',
+  type: 'Food',
   quantity_sent: 0,
   unit_sent: 'kg',
   tonne_sent: 0,
   quantity: 0,
+  unit: 'kg',
   unit_received: 'kg',
   tonne_received: 0,
   obs: '',
@@ -74,7 +82,9 @@ const initialWaybillItem: WaybillItem = {
   return_qty: 0,
   activity: '',
   date: dayjs().format('YYYY-MM-DD'),
-  location: ''
+  reception_date: dayjs().format('YYYY-MM-DD'),
+  location: '',
+  status: ''
 };
 
 // Options pour les unités
@@ -120,15 +130,18 @@ const ReceptionWaybill: React.FC = () => {
   };
 
   // Filtrer les éléments selon le terme de recherche
-  const filteredItems = waybillItems.filter(item => {
+  const filteredItems = waybillItems ? waybillItems.filter(item => {
+    if (!item) return false;
     const searchLower = searchTerm.toLowerCase();
     return (
-      item.waybill_number.toLowerCase().includes(searchLower) ||
-      item.batchnumber.toLowerCase().includes(searchLower) ||
-      item.commodity_specific.toLowerCase().includes(searchLower) ||
-      item.location.toLowerCase().includes(searchLower)
+      (item.waybill_number && item.waybill_number.toLowerCase().includes(searchLower)) ||
+      (item.batch_number && item.batch_number.toLowerCase().includes(searchLower)) ||
+      (item.batchnumber && item.batchnumber.toLowerCase().includes(searchLower)) ||
+      (item.commodity && item.commodity.toLowerCase().includes(searchLower)) ||
+      (item.commodity_specific && item.commodity_specific.toLowerCase().includes(searchLower)) ||
+      (item.location && item.location.toLowerCase().includes(searchLower))
     );
-  });
+  }) : [];
 
   // Gérer l'ouverture du dialogue pour ajouter un nouvel élément
   const handleAddNew = () => {
@@ -145,7 +158,7 @@ const ReceptionWaybill: React.FC = () => {
   };
 
   // Gérer la suppression d'un élément
-  const handleDelete = async (id?: number) => {
+  const handleDelete = async (id?: number | string | undefined) => {
     if (!id) return;
     
     try {
@@ -196,15 +209,15 @@ const ReceptionWaybill: React.FC = () => {
 
   // Calculer automatiquement les tonnes en fonction de la quantité et du type de produit
   useEffect(() => {
-    if (currentItem.quantity_sent > 0) {
-      const tonneSent = currentItem.unit_sent === 'kg' ? currentItem.quantity_sent / 1000 : 0;
+    if (currentItem.quantity_sent && currentItem.quantity_sent > 0) {
+      const tonneSent = currentItem.unit_sent === 'kg' ? (currentItem.quantity_sent || 0) / 1000 : 0;
       setCurrentItem(prev => ({ ...prev, tonne_sent: tonneSent }));
     }
     
-    if (currentItem.quantity > 0) {
+    if (currentItem.quantity && currentItem.quantity > 0) {
       // Déterminer le poids unitaire en fonction du type de produit
       let poidsUnitaire = 0;
-      const commodityLower = currentItem.commodity_specific.toLowerCase();
+      const commodityLower = (currentItem.commodity_specific || '').toLowerCase();
       
       if (commodityLower.includes('huile')) {
         // Poids d'un carton d'huile (en kg)
@@ -221,14 +234,14 @@ const ReceptionWaybill: React.FC = () => {
       }
       
       // Calculer le tonnage en fonction du poids unitaire
-      const tonneReceived = (currentItem.quantity * poidsUnitaire) / 1000;
+      const tonneReceived = ((currentItem.quantity || 0) * poidsUnitaire) / 1000;
       setCurrentItem(prev => ({ ...prev, tonne_received: tonneReceived }));
     }
   }, [currentItem.quantity_sent, currentItem.unit_sent, currentItem.quantity, currentItem.unit_received, currentItem.commodity_specific]);
 
   // Calculer automatiquement la perte
   useEffect(() => {
-    const loss = currentItem.quantity_sent - currentItem.quantity - currentItem.return_qty;
+    const loss = (currentItem.quantity_sent || 0) - (currentItem.quantity || 0) - (currentItem.return_qty || 0);
     setCurrentItem(prev => ({ ...prev, loss: loss > 0 ? loss : 0 }));
   }, [currentItem.quantity_sent, currentItem.quantity, currentItem.return_qty]);
 
@@ -343,10 +356,10 @@ const ReceptionWaybill: React.FC = () => {
                     <TableCell>{item.type}</TableCell>
                     <TableCell align="right">{item.quantity_sent}</TableCell>
                     <TableCell>{item.unit_sent}</TableCell>
-                    <TableCell align="right">{item.tonne_sent.toFixed(3)}</TableCell>
-                    <TableCell align="right">{item.quantity}</TableCell>
-                    <TableCell>{item.unit_received}</TableCell>
-                    <TableCell align="right">{item.tonne_received.toFixed(3)}</TableCell>
+                    <TableCell align="right">{(item.tonne_sent || 0).toFixed(3)}</TableCell>
+                    <TableCell align="right">{item.quantity || 0}</TableCell>
+                    <TableCell>{item.unit_received || ''}</TableCell>
+                    <TableCell align="right">{(item.tonne_received || 0).toFixed(3)}</TableCell>
                     <TableCell>{item.obs}</TableCell>
                     <TableCell align="right">{item.loss}</TableCell>
                     <TableCell align="right">{item.mount_in}</TableCell>

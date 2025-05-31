@@ -217,54 +217,311 @@ app.get('/api/waybill-items', async (req, res) => {
     // Créer une connexion à la base de données
     const connection = await mysql.createConnection(dbConfig);
     
-    try {
-      // Vérifier si la table waybill_items existe
-      const [tables] = await connection.query(
-        "SHOW TABLES LIKE 'waybill_items'"
-      );
+    // Vérifier si la table waybill_items existe
+    const [tables] = await connection.query(`
+      SELECT TABLE_NAME 
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'waybill_items'
+    `, [process.env.DB_NAME || 'gestion_distribution']);
+    
+    if (tables.length === 0) {
+      console.log('La table waybill_items n\'existe pas, retour de données de test');
+      // Si la table n'existe pas, retourner des données de test
+      const testData = [
+        {
+          id: 1,
+          waybill_number: 'WB001',
+          batchnumber: 'B001',
+          commodity_specific: 'Farine',
+          type: 'Standard',
+          quantity_sent: 100,
+          unit_sent: 'sacs',
+          tonne_sent: 2.5,
+          quantity: 98,
+          unit_received: 'sacs',
+          tonne_received: 2.45,
+          obs: 'RAS',
+          loss: 2,
+          mount_in: 0,
+          return_qty: 0,
+          activity: 'Distribution',
+          date: '2023-01-15',
+          location: 'Entrepôt A'
+        },
+        {
+          id: 2,
+          waybill_number: 'WB002',
+          batchnumber: 'B002',
+          commodity_specific: 'Haricot',
+          type: 'Premium',
+          quantity_sent: 50,
+          unit_sent: 'sacs',
+          tonne_sent: 2.5,
+          quantity: 49,
+          unit_received: 'sacs',
+          tonne_received: 2.45,
+          obs: 'Un sac endommagé',
+          loss: 1,
+          mount_in: 0,
+          return_qty: 0,
+          activity: 'Distribution',
+          date: '2023-01-20',
+          location: 'Entrepôt B'
+        },
+        {
+          id: 3,
+          waybill_number: 'WB003',
+          batchnumber: 'B003',
+          commodity_specific: 'Huile',
+          type: 'Standard',
+          quantity_sent: 200,
+          unit_sent: 'cartons',
+          tonne_sent: 4,
+          quantity: 195,
+          unit_received: 'cartons',
+          tonne_received: 3.9,
+          obs: 'Cinq cartons endommagés',
+          loss: 5,
+          mount_in: 0,
+          return_qty: 0,
+          activity: 'Distribution',
+          date: '2023-02-05',
+          location: 'Entrepôt C'
+        }
+      ];
       
-      if (tables.length === 0) {
-        console.log("La table waybill_items n'existe pas encore, retourne des données de test");
-        // Retourner des données de test si la table n'existe pas
-        const testData = [
-          {
-            id: '1',
-            waybill_number: 'WB-2025-001',
-            commodity: 'Riz',
-            quantity: 1000,
-            unit: 'kg',
-            batch_number: 'B2025-001',
-            reception_date: '2025-01-15',
-            status: 'Reçu'
-          },
-          {
-            id: '2',
-            waybill_number: 'WB-2025-002',
-            commodity: 'Haricots',
-            quantity: 500,
-            unit: 'kg',
-            batch_number: 'B2025-002',
-            reception_date: '2025-02-20',
-            status: 'En attente'
-          }
-        ];
-        await connection.end();
-        return res.status(200).json(testData);
-      }
-      
+      return res.json(testData);
+    } else {
       // Si la table existe, récupérer les données réelles
-      const [rows] = await connection.query('SELECT * FROM waybill_items ORDER BY reception_date DESC');
-      await connection.end();
+      const [rows] = await connection.query(`
+        SELECT * FROM waybill_items
+        ORDER BY date DESC
+      `);
       
-      res.status(200).json(rows);
-    } catch (err) {
-      console.error('Erreur lors de la requête SQL:', err);
       await connection.end();
-      return res.status(500).json({ error: `Erreur de base de données: ${err.message}` });
+      return res.json(rows);
     }
   } catch (error) {
-    console.error('Erreur lors de la récupération des éléments du waybill:', error);
-    res.status(500).json({ error: String(error) });
+    console.error('Erreur lors de la récupération des waybill items:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de la récupération des waybill items' });
+  }
+});
+
+// Endpoint pour ajouter un nouvel élément waybill
+app.post('/api/waybill-items', async (req, res) => {
+  try {
+    const waybillItem = req.body;
+    console.log('Ajout d\'un nouvel élément waybill:', waybillItem);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Vérifier si la table waybill_items existe
+    const [tables] = await connection.query(`
+      SELECT TABLE_NAME 
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'waybill_items'
+    `, [process.env.DB_NAME || 'gestion_distribution']);
+    
+    if (tables.length === 0) {
+      // Si la table n'existe pas, la créer
+      console.log('Création de la table waybill_items');
+      await connection.query(`
+        CREATE TABLE waybill_items (
+          id INT AUTO_INCREMENT PRIMARY KEY,
+          waybill_number VARCHAR(50),
+          batchnumber VARCHAR(50),
+          commodity_specific VARCHAR(100),
+          type VARCHAR(50),
+          quantity_sent FLOAT,
+          unit_sent VARCHAR(50),
+          tonne_sent FLOAT,
+          quantity FLOAT,
+          unit_received VARCHAR(50),
+          tonne_received FLOAT,
+          obs TEXT,
+          loss FLOAT,
+          mount_in FLOAT,
+          return_qty FLOAT,
+          activity VARCHAR(100),
+          date DATE,
+          location VARCHAR(100),
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        )
+      `);
+    }
+    
+    // Insérer le nouvel élément
+    const [result] = await connection.query(
+      `INSERT INTO waybill_items (
+        waybill_number, batchnumber, commodity_specific, type, 
+        quantity_sent, unit_sent, tonne_sent, quantity, 
+        unit_received, tonne_received, obs, loss, 
+        mount_in, return_qty, activity, date, location
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [
+        waybillItem.waybill_number,
+        waybillItem.batchnumber,
+        waybillItem.commodity_specific,
+        waybillItem.type,
+        waybillItem.quantity_sent,
+        waybillItem.unit_sent,
+        waybillItem.tonne_sent,
+        waybillItem.quantity,
+        waybillItem.unit_received,
+        waybillItem.tonne_received,
+        waybillItem.obs,
+        waybillItem.loss,
+        waybillItem.mount_in,
+        waybillItem.return_qty,
+        waybillItem.activity,
+        waybillItem.date,
+        waybillItem.location
+      ]
+    );
+    
+    // Récupérer l'élément inséré avec son ID
+    const [rows] = await connection.query(
+      'SELECT * FROM waybill_items WHERE id = ?',
+      [result.insertId]
+    );
+    
+    await connection.end();
+    res.status(201).json(rows[0]);
+  } catch (error) {
+    console.error('Erreur lors de l\'ajout d\'un waybill item:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de l\'ajout d\'un waybill item' });
+  }
+});
+
+// Endpoint pour mettre à jour un élément waybill existant
+app.put('/api/waybill-items/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const waybillItem = req.body;
+    console.log(`Mise à jour de l'élément waybill ${id}:`, waybillItem);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Vérifier si la table waybill_items existe
+    const [tables] = await connection.query(`
+      SELECT TABLE_NAME 
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'waybill_items'
+    `, [process.env.DB_NAME || 'gestion_distribution']);
+    
+    if (tables.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Table waybill_items non trouvée' });
+    }
+    
+    // Mettre à jour l'élément
+    await connection.query(
+      `UPDATE waybill_items SET
+        waybill_number = ?,
+        batchnumber = ?,
+        commodity_specific = ?,
+        type = ?,
+        quantity_sent = ?,
+        unit_sent = ?,
+        tonne_sent = ?,
+        quantity = ?,
+        unit_received = ?,
+        tonne_received = ?,
+        obs = ?,
+        loss = ?,
+        mount_in = ?,
+        return_qty = ?,
+        activity = ?,
+        date = ?,
+        location = ?
+      WHERE id = ?`,
+      [
+        waybillItem.waybill_number,
+        waybillItem.batchnumber,
+        waybillItem.commodity_specific,
+        waybillItem.type,
+        waybillItem.quantity_sent,
+        waybillItem.unit_sent,
+        waybillItem.tonne_sent,
+        waybillItem.quantity,
+        waybillItem.unit_received,
+        waybillItem.tonne_received,
+        waybillItem.obs,
+        waybillItem.loss,
+        waybillItem.mount_in,
+        waybillItem.return_qty,
+        waybillItem.activity,
+        waybillItem.date,
+        waybillItem.location,
+        id
+      ]
+    );
+    
+    // Récupérer l'élément mis à jour
+    const [rows] = await connection.query(
+      'SELECT * FROM waybill_items WHERE id = ?',
+      [id]
+    );
+    
+    if (rows.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Élément waybill non trouvé' });
+    }
+    
+    await connection.end();
+    res.json(rows[0]);
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour d\'un waybill item:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de la mise à jour d\'un waybill item' });
+  }
+});
+
+// Endpoint pour supprimer un élément waybill
+app.delete('/api/waybill-items/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    console.log(`Suppression de l'élément waybill ${id}`);
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Vérifier si la table waybill_items existe
+    const [tables] = await connection.query(`
+      SELECT TABLE_NAME 
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = 'waybill_items'
+    `, [process.env.DB_NAME || 'gestion_distribution']);
+    
+    if (tables.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Table waybill_items non trouvée' });
+    }
+    
+    // Vérifier si l'élément existe
+    const [rows] = await connection.query(
+      'SELECT * FROM waybill_items WHERE id = ?',
+      [id]
+    );
+    
+    if (rows.length === 0) {
+      await connection.end();
+      return res.status(404).json({ error: 'Élément waybill non trouvé' });
+    }
+    
+    // Supprimer l'élément
+    await connection.query(
+      'DELETE FROM waybill_items WHERE id = ?',
+      [id]
+    );
+    
+    await connection.end();
+    res.json({ success: true, message: 'Élément waybill supprimé avec succès' });
+  } catch (error) {
+    console.error('Erreur lors de la suppression d\'un waybill item:', error);
+    res.status(500).json({ error: 'Erreur serveur lors de la suppression d\'un waybill item' });
   }
 });
 
