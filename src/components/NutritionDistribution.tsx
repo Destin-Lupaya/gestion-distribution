@@ -97,15 +97,92 @@ function NutritionDistribution() {
     setError(null);
 
     try {
-      const response = await apiService.get(`/api/nutrition/beneficiaires/${searchId}`);
-
-      if (response.error) throw new Error(response.error);
-
-      if (response.data) {
-        setBeneficiaire(response.data);
-        await fetchDistributions(response.data.nutrition_rations[0]?.id);
-      } else {
-        setError('Bénéficiaire non trouvé');
+      // Nettoyer et normaliser l'ID de recherche
+      // Supprimer les espaces, points et autres caractères spéciaux
+      let rawId = searchId.trim();
+      
+      // Extraire uniquement les caractères alphanumériques (lettres et chiffres)
+      const alphanumericRegex = /[^a-zA-Z0-9-]/g;
+      let cleanSearchId = rawId.replace(alphanumericRegex, '');
+      
+      console.log(`ID original: '${rawId}', ID nettoyé: '${cleanSearchId}'`);
+      
+      // Stratégie de recherche:
+      // 1. Essayer d'abord avec l'ID complet tel quel (peut inclure R-)
+      // 2. Si ça échoue et que l'ID commence par R-, essayer sans le préfixe
+      // 3. Si ça échoue et que l'ID ne commence pas par R-, essayer avec le préfixe
+      
+      let foundBeneficiary = false;
+      
+      // Première tentative: ID tel quel
+      try {
+        console.log(`Tentative 1: Recherche avec ID: '${cleanSearchId}'`);
+        const response = await apiService.get(`/api/nutrition/beneficiaires/${encodeURIComponent(cleanSearchId)}`);
+        
+        if (response.data) {
+          console.log('Bénéficiaire trouvé avec le format exact');
+          setBeneficiaire(response.data);
+          await fetchDistributions(response.data.nutrition_rations[0]?.id);
+          foundBeneficiary = true;
+        }
+      } catch (firstError) {
+        console.log('Première tentative échouée');
+      }
+      
+      // Deuxième tentative: format alternatif
+      if (!foundBeneficiary) {
+        try {
+          let alternativeId;
+          
+          if (cleanSearchId.toUpperCase().startsWith('R-')) {
+            // Si l'ID commence par R-, essayer sans le préfixe
+            alternativeId = cleanSearchId.substring(2);
+            console.log(`Tentative 2: Essai sans préfixe: '${alternativeId}'`);
+          } else {
+            // Si l'ID ne commence pas par R-, essayer avec le préfixe
+            alternativeId = `R-${cleanSearchId}`;
+            console.log(`Tentative 2: Essai avec préfixe: '${alternativeId}'`);
+          }
+          
+          const response = await apiService.get(`/api/nutrition/beneficiaires/${encodeURIComponent(alternativeId)}`);
+          
+          if (response.data) {
+            console.log('Bénéficiaire trouvé avec le format alternatif');
+            setBeneficiaire(response.data);
+            await fetchDistributions(response.data.nutrition_rations[0]?.id);
+            foundBeneficiary = true;
+          }
+        } catch (secondError) {
+          console.log('Deuxième tentative échouée');
+        }
+      }
+      
+      // Troisième tentative: uniquement la partie numérique
+      if (!foundBeneficiary) {
+        try {
+          // Extraire uniquement les chiffres
+          const numericPart = cleanSearchId.replace(/\D/g, '');
+          
+          if (numericPart && numericPart !== cleanSearchId) {
+            console.log(`Tentative 3: Essai avec uniquement la partie numérique: '${numericPart}'`);
+            
+            const response = await apiService.get(`/api/nutrition/beneficiaires/${encodeURIComponent(numericPart)}`);
+            
+            if (response.data) {
+              console.log('Bénéficiaire trouvé avec la partie numérique');
+              setBeneficiaire(response.data);
+              await fetchDistributions(response.data.nutrition_rations[0]?.id);
+              foundBeneficiary = true;
+            }
+          }
+        } catch (thirdError) {
+          console.log('Troisième tentative échouée');
+        }
+      }
+      
+      // Si toutes les tentatives échouent
+      if (!foundBeneficiary) {
+        setError('Bénéficiaire non trouvé. Vérifiez le numéro d\'enregistrement.');
       }
     } catch (err: any) {
       console.error('Error searching beneficiary:', err);

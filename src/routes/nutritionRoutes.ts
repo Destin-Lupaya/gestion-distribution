@@ -173,8 +173,33 @@ router.post('/register-beneficiary', async (req: Request, res: Response) => {
     await connection.beginTransaction();
     
     try {
+      // Valider les données requises
+      if (!numero_enregistrement || !nom_enfant) {
+        return res.status(400).json({
+          success: false,
+          message: 'Le numéro d\'enregistrement et le nom de l\'enfant sont obligatoires'
+        });
+      }
+
       // Generate UUID for the beneficiary
       const beneficiaireId = uuidv4();
+      
+      // Convertir les valeurs undefined en null pour éviter l'erreur "Bind parameters must not contain undefined"
+      const params = [
+        beneficiaireId,
+        numero_enregistrement || null,
+        nom_enfant || null,
+        nom_mere || null,
+        age_mois !== undefined ? age_mois : null,
+        sexe || null,
+        province || null,
+        territoire || null,
+        partenaire || null,
+        village || null,
+        site_cs || null
+      ];
+      
+      console.log('Paramètres d\'insertion:', params);
       
       // Insert beneficiary
       await connection.execute(
@@ -191,19 +216,7 @@ router.post('/register-beneficiary', async (req: Request, res: Response) => {
           village, 
           site_cs
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [
-          beneficiaireId,
-          numero_enregistrement,
-          nom_enfant,
-          nom_mere,
-          age_mois,
-          sexe,
-          province,
-          territoire,
-          partenaire,
-          village,
-          site_cs
-        ]
+        params
       );
       
       // Generate a ration card number
@@ -215,6 +228,17 @@ router.post('/register-beneficiary', async (req: Request, res: Response) => {
       dateFin.setMonth(dateFin.getMonth() + 6);
       
       // Insert ration
+      const rationParams = [
+        uuidv4(),
+        beneficiaireId,
+        numeroRation,
+        dateDebut.toISOString().split('T')[0],
+        dateFin.toISOString().split('T')[0],
+        'ACTIF'
+      ];
+      
+      console.log('Paramètres d\'insertion de ration:', rationParams);
+      
       await connection.execute(
         `INSERT INTO nutrition_rations (
           id, 
@@ -224,14 +248,7 @@ router.post('/register-beneficiary', async (req: Request, res: Response) => {
           date_fin, 
           statut
         ) VALUES (?, ?, ?, ?, ?, ?)`,
-        [
-          uuidv4(),
-          beneficiaireId,
-          numeroRation,
-          dateDebut.toISOString().split('T')[0],
-          dateFin.toISOString().split('T')[0],
-          'ACTIF'
-        ]
+        rationParams
       );
       
       // Commit transaction

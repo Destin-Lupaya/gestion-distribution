@@ -78,50 +78,17 @@ export default function DistributionReport() {
       };
       
       if (location) {
-        params.location = location;
+        params.siteId = location;
       }
 
-      // Remplacer par un appel API réel
-      // const response = await apiService.get('/api/reports/distribution', params);
+      // Appel API réel
+      const response = await apiService.get('/api/reports/distribution', params);
       
-      // Données simulées pour démonstration
-      const mockData: DistributionItem[] = [
-        {
-          site: 'Site A',
-          beneficiaries: 120,
-          households: 30,
-          commodities: [
-            { name: 'Farine', quantity: 750 },
-            { name: 'Haricot', quantity: 300 },
-            { name: 'Huile', quantity: 150 }
-          ]
-        },
-        {
-          site: 'Site B',
-          beneficiaries: 85,
-          households: 22,
-          commodities: [
-            { name: 'Farine', quantity: 550 },
-            { name: 'Haricot', quantity: 220 },
-            { name: 'Huile', quantity: 110 }
-          ]
-        },
-        {
-          site: 'Site C',
-          beneficiaries: 150,
-          households: 38,
-          commodities: [
-            { name: 'Farine', quantity: 950 },
-            { name: 'Haricot', quantity: 380 },
-            { name: 'Huile', quantity: 190 }
-          ]
-        }
-      ];
+      if (!response || !Array.isArray(response)) {
+        throw new Error('Format de réponse invalide');
+      }
       
-      // Simuler un délai d'API
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      setDistributionData(mockData);
+      setDistributionData(response);
       setSnackbar({
         open: true,
         message: 'Rapport généré avec succès',
@@ -207,8 +174,9 @@ export default function DistributionReport() {
             </Grid>
             <Grid item xs={12} sm={6} md={3}>
               <FormControl fullWidth>
-                <InputLabel>Emplacement</InputLabel>
+                <InputLabel id="location-label">Emplacement</InputLabel>
                 <Select
+                  labelId="location-label"
                   value={location}
                   onChange={(e) => setLocation(e.target.value)}
                   label="Emplacement"

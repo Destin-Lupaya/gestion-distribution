@@ -54,25 +54,60 @@ export default function ManualRegistration() {
     setQrCode(null);
     setSuccess(false);
 
+    // Valider les champs obligatoires
+    if (!formData.site_name || !formData.household_id || !formData.token_number) {
+      setError('Veuillez remplir tous les champs obligatoires');
+      toast.error('Veuillez remplir tous les champs obligatoires');
+      setLoading(false);
+      return;
+    }
+
     try {
-      const response = await fetch('http://localhost:3001/api/register-beneficiary', {
+      // Transformer les données pour correspondre au format attendu par l'API
+      // et s'assurer qu'aucune valeur n'est undefined
+      const apiData = {
+        // Champs requis par l'API de nutrition
+        numero_enregistrement: formData.token_number || '',
+        nom_enfant: formData.first_name ? `${formData.first_name} ${formData.last_name || ''}`.trim() : '',
+        nom_mere: formData.alternate_recipient || '',
+        age_mois: 0, // Valeur par défaut
+        sexe: 'M', // Valeur par défaut
+        province: '',
+        territoire: '',
+        partenaire: '',
+        village: formData.site_address || '',
+        site_cs: formData.site_name || ''
+      };
+
+      console.log('Données envoyées à l\'API:', apiData);
+
+      // Utiliser l'URL correcte de l'API
+      const response = await fetch('http://localhost:3001/api/nutrition/register-beneficiary', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(formData),
+        body: JSON.stringify(apiData),
       });
 
       const result = await response.json();
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erreur lors de l\'enregistrement');
+        throw new Error(result.error || result.message || 'Erreur lors de l\'enregistrement');
       }
 
-      setQrCode(result.data.qrData);
+      // Générer un QR code avec les informations du bénéficiaire
+      const qrData = JSON.stringify({
+        id: result.beneficiaire_id,
+        token: formData.token_number,
+        name: `${formData.first_name} ${formData.last_name || ''}`.trim()
+      });
+
+      setQrCode(qrData);
       setSuccess(true);
       toast.success('Bénéficiaire enregistré avec succès');
     } catch (err) {
+      console.error('Erreur détaillée:', err);
       setError(err instanceof Error ? err.message : 'Une erreur est survenue');
       toast.error(err instanceof Error ? err.message : 'Une erreur est survenue');
     } finally {

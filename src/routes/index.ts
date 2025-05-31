@@ -6,6 +6,7 @@ import nutritionRoutes from './nutritionRoutes';
 import programmesRoutes from './programmesRoutes';
 import evenementsRoutes from './evenementsRoutes';
 import assistancesRoutes from './assistancesRoutes';
+import reportsRoutes from './reportsRoutes';
 
 const router = Router();
 
@@ -20,6 +21,9 @@ router.use('/evenements-distribution', evenementsRoutes);
 
 // Mount assistances distribuées routes
 router.use('/assistances-distribuees', assistancesRoutes);
+
+// Mount reports routes
+router.use('/reports', reportsRoutes);
 
 // Health check endpoint
 router.get('/health', async (_req: Request, res: Response) => {

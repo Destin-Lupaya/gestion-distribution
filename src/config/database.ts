@@ -1,7 +1,11 @@
 // Ce fichier est maintenant déprécié car nous utilisons une API REST
 // Toute la logique de base de données a été déplacée vers le serveur Express
 
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
+// Importer la configuration d'environnement unifiée
+import { API_CONFIG } from './environment';
+
+// Utiliser la configuration unifiée qui fonctionne à la fois côté serveur et côté client
+const API_BASE_URL = API_CONFIG.BASE_URL;
 
 export const testConnection = async (): Promise<boolean> => {
   try {

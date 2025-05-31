@@ -1,8 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 // Configuration de l'API
+// Utiliser une approche compatible avec la configuration TypeScript actuelle
+const API_URL = process.env.VITE_API_URL || 'http://localhost:3001';
 const API_CONFIG = {
-    BASE_URL: import.meta.env.VITE_API_URL || 'http://localhost:3001',
+    BASE_URL: API_URL,
     ENDPOINTS: {
         HEALTH: '/api/health',
         SITES: '/api/sites',

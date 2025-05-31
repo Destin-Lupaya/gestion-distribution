@@ -28,7 +28,8 @@ console.log('Configuration de l\'environnement:', {
 });
 
 const app = express();
-const PORT = process.env.PORT || 3002;
+// Utiliser le port 3001 pour être cohérent avec la configuration du client
+const PORT = process.env.PORT || 3001;
 
 // Configuration CORS plus permissive
 app.use(cors({

@@ -1,11 +1,12 @@
-import express from 'express';
+import { Router, Request, Response } from 'express';
 import mysql from 'mysql2/promise';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const router = express.Router();
+// Créer le router en utilisant Router directement
+const router = Router();
 
 // Configuration de la base de données
 const dbConfig = {

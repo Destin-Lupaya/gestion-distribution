@@ -22,9 +22,10 @@ class ApiService {
      * Méthode pour effectuer un appel GET
      * @param endpoint - L'endpoint API à appeler
      * @param params - Paramètres optionnels de requête
+     * @param timeoutMs - Délai d'expiration en millisecondes (par défaut: 10000ms)
      * @returns La réponse de l'API
      */
-    async get(endpoint, params) {
+    async get(endpoint, params, timeoutMs = 10000) {
         let url = `${this.baseUrl}${endpoint}`;
         if (params) {
             const queryParams = new URLSearchParams();
@@ -38,13 +39,42 @@ class ApiService {
                 url += `?${queryString}`;
             }
         }
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Content-Type': 'application/json'
+        // Implémenter un timeout pour éviter les attentes infinies
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
+        try {
+            console.log(`API Call: GET ${url}`);
+            const startTime = Date.now();
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json'
+                },
+                signal: controller.signal
+            });
+            // Annuler le timeout car la requête a réussi
+            clearTimeout(timeoutId);
+            const endTime = Date.now();
+            console.log(`API Response: GET ${url} - Status: ${response.status} - Time: ${endTime - startTime}ms`);
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.status} ${response.statusText}`);
             }
-        });
-        return response.json();
+            const data = await response.json();
+            return data;
+        }
+        catch (error) {
+            // Annuler le timeout en cas d'erreur
+            clearTimeout(timeoutId);
+            // Gérer spécifiquement les erreurs d'abandon
+            if (error instanceof Error && error.name === 'AbortError') {
+                console.error(`API Timeout: GET ${url} - Request aborted after ${timeoutMs}ms`);
+                throw new Error(`La requête a pris trop de temps et a été annulée. Veuillez réessayer.`);
+            }
+            const errorMessage = error instanceof Error ? error.message : 'Erreur inconnue';
+            console.error(`API Error: GET ${url} - ${errorMessage}`);
+            throw error;
+        }
     }
     /**
      * Méthode pour effectuer un appel POST
@@ -129,6 +159,29 @@ class ApiService {
      */
     async getDistributions() {
         return this.get(api_1.default.ENDPOINTS.GET_DISTRIBUTIONS);
+    }
+    /**
+     * Méthode pour approuver une distribution
+     * @param distributionId - ID de la distribution à approuver
+     * @returns Résultat de l'approbation
+     */
+    async approveDistribution(distributionId) {
+        return this.put(`/api/distributions/${distributionId}/approve`, {});
+    }
+    /**
+     * Méthode pour annuler une distribution
+     * @param distributionId - ID de la distribution à annuler
+     * @returns Résultat de l'annulation
+     */
+    async cancelDistribution(distributionId) {
+        return this.put(`/api/distributions/${distributionId}/cancel`, {});
+    }
+    /**
+     * Méthode pour récupérer les distributions en attente
+     * @returns Liste des distributions en attente
+     */
+    async getPendingDistributions() {
+        return this.get('/api/distributions/pending');
     }
 }
 // Exporter une instance singleton du service

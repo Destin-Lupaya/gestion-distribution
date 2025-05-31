@@ -208,6 +208,21 @@ const StatsDialog: React.FC<StatsDialogProps> = ({ open, onClose, data, tabIndex
   };
 
   const getStats = (): Stats => {
+    // Vérifier si data est un tableau avant d'utiliser les méthodes de tableau
+    if (!Array.isArray(data)) {
+      console.warn('Les données ne sont pas un tableau:', data);
+      return {
+        total: 0,
+        beneficiaires: 0,
+        today: 0,
+        thisWeek: 0,
+        thisMonth: 0,
+        completed: 0,
+        pending: 0,
+        cancelled: 0
+      } as SiteStats;
+    }
+    
     switch (tabIndex) {
       case 0: // Sites
         return {

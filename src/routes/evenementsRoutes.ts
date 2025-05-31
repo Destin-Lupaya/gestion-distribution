@@ -1,11 +1,12 @@
-import express from 'express';
+import { Router, Request, Response } from 'express';
 import mysql from 'mysql2/promise';
 import { v4 as uuidv4 } from 'uuid';
 import dotenv from 'dotenv';
 
 dotenv.config();
 
-const router = express.Router();
+// Créer le router en utilisant Router directement
+const router = Router();
 
 // Configuration de la base de données
 const dbConfig = {
@@ -15,6 +16,21 @@ const dbConfig = {
   database: process.env.DB_NAME || 'gestion_distribution',
   port: parseInt(process.env.DB_PORT || '3306', 10)
 };
+
+// Interface pour les événements de distribution
+interface EvenementDistribution {
+  evenement_id?: string;
+  programme_id: string;
+  site_id: string;
+  date_distribution_prevue: string;
+  heure_debut_prevue: string;
+  heure_fin_prevue: string;
+  type_assistance_prevue: string;
+  quantite_totale_prevue: number;
+  statut_evenement: string;
+  date_creation?: string;
+  date_modification?: string;
+}
 
 // GET - Récupérer tous les événements de distribution
 router.get('/', async (req, res) => {
@@ -47,6 +63,74 @@ router.get('/', async (req, res) => {
     console.log('Colonnes disponibles dans la table evenements_distribution:', columns);
     
     // Utiliser une requête plus robuste qui s'adapte aux noms de colonnes disponibles
+    try {
+      const [rows] = await connection.query(`
+        SELECT 
+          ed.evenement_id,
+          ed.programme_id,
+          pa.nom_programme,
+          ed.site_id,
+          s.nom AS nom_site,
+          ed.date_distribution_prevue,
+          ed.heure_debut_prevue,
+          ed.heure_fin_prevue,
+          ed.type_assistance_prevue,
+          ed.quantite_totale_prevue,
+          ed.statut_evenement,
+          ed.date_creation,
+          ed.date_modification
+        FROM 
+          evenements_distribution ed
+        JOIN 
+          programmes_aide pa ON ed.programme_id = pa.programme_id
+        JOIN 
+          sites s ON ed.site_id = s.id
+        ORDER BY 
+          ed.date_distribution_prevue DESC
+      `);
+      
+      await connection.end();
+      res.json(rows);
+    } catch (queryError) {
+      console.error('Erreur lors de l\'exécution de la requête SQL:', queryError);
+      
+      // Essayer une requête plus simple pour diagnostiquer le problème
+      try {
+        const [simpleRows] = await connection.query('SELECT * FROM evenements_distribution LIMIT 1');
+        console.log('Structure d\'un enregistrement de la table evenements_distribution:', simpleRows[0]);
+        
+        // Si nous arrivons ici, c'est que la table existe mais les jointures ou les noms de colonnes posent problème
+        await connection.end();
+        res.status(500).json({ 
+          success: false, 
+          error: 'Erreur lors de l\'exécution de la requête SQL: ' + queryError.message,
+          suggestion: 'Vérifiez les jointures et les noms de colonnes dans la requête'
+        });
+      } catch (simpleQueryError) {
+        // Si même la requête simple échoue, il y a un problème plus fondamental avec la table
+        console.error('Erreur lors de l\'exécution d\'une requête simple:', simpleQueryError);
+        await connection.end();
+        res.status(500).json({ 
+          success: false, 
+          error: 'Erreur lors de l\'accès à la table evenements_distribution: ' + simpleQueryError.message
+        });
+      }
+    }
+  } catch (error) {
+    console.error('Erreur lors de la récupération des événements:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erreur lors de la récupération des événements: ' + error.message
+    });
+  }
+});
+
+// GET - Récupérer un événement de distribution par ID
+router.get('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const connection = await mysql.createConnection(dbConfig);
+    
     const [rows] = await connection.query(`
       SELECT 
         ed.evenement_id,
@@ -68,50 +152,10 @@ router.get('/', async (req, res) => {
         programmes_aide pa ON ed.programme_id = pa.programme_id
       JOIN 
         sites s ON ed.site_id = s.id
-      ORDER BY 
-        ed.date_distribution_prevue DESC
-    `);
-    
-    await connection.end();
-    res.json(rows);
-  } catch (error) {
-    console.error('Erreur lors de la récupération des événements:', error);
-    res.status(500).json({ 
-      success: false, 
-      error: 'Erreur lors de la récupération des événements' 
-    });
-  }
-});
-
-// GET - Récupérer un événement par ID
-router.get('/:evenementId', async (req, res) => {
-  try {
-    const { evenementId } = req.params;
-    const connection = await mysql.createConnection(dbConfig);
-    const [rows] = await connection.query(`
-      SELECT 
-        ed.evenement_id,
-        ed.programme_id,
-        pa.nom_programme,
-        ed.site_id,
-        s.nom AS nom_site,
-        ed.date_distribution_prevue,
-        ed.heure_debut_prevue,
-        ed.heure_fin_prevue,
-        ed.type_assistance_prevue,
-        ed.quantite_totale_prevue,
-        ed.statut_evenement,
-        ed.created_at,
-        ed.updated_at
-      FROM 
-        evenements_distribution ed
-      JOIN 
-        programmes_aide pa ON ed.programme_id = pa.programme_id
-      JOIN 
-        sites s ON ed.site_id = s.id
       WHERE 
         ed.evenement_id = ?
-    `, [evenementId]);
+    `, [id]);
+    
     await connection.end();
     
     if (Array.isArray(rows) && rows.length === 0) {
@@ -126,7 +170,242 @@ router.get('/:evenementId', async (req, res) => {
     console.error('Erreur lors de la récupération de l\'événement:', error);
     res.status(500).json({ 
       success: false, 
-      error: 'Erreur lors de la récupération de l\'événement' 
+      error: 'Erreur lors de la récupération de l\'événement: ' + error.message 
+    });
+  }
+});
+
+// POST - Créer un nouvel événement de distribution
+router.post('/', async (req, res) => {
+  try {
+    const evenement: EvenementDistribution = req.body;
+    
+    // Validation des données
+    if (!evenement.programme_id || !evenement.site_id || !evenement.date_distribution_prevue) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Les champs programme_id, site_id et date_distribution_prevue sont obligatoires' 
+      });
+    }
+    
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Générer un ID unique
+    const evenement_id = uuidv4();
+    
+    // Préparer la date de création
+    const date_creation = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    
+    // Insérer l'événement
+    await connection.query(`
+      INSERT INTO evenements_distribution (
+        evenement_id,
+        programme_id,
+        site_id,
+        date_distribution_prevue,
+        heure_debut_prevue,
+        heure_fin_prevue,
+        type_assistance_prevue,
+        quantite_totale_prevue,
+        statut_evenement,
+        date_creation,
+        date_modification
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `, [
+      evenement_id,
+      evenement.programme_id,
+      evenement.site_id,
+      evenement.date_distribution_prevue,
+      evenement.heure_debut_prevue,
+      evenement.heure_fin_prevue,
+      evenement.type_assistance_prevue,
+      evenement.quantite_totale_prevue,
+      evenement.statut_evenement || 'PLANIFIÉ',
+      date_creation,
+      date_creation
+    ]);
+    
+    // Récupérer l'événement créé
+    const [rows] = await connection.query(`
+      SELECT 
+        ed.evenement_id,
+        ed.programme_id,
+        pa.nom_programme,
+        ed.site_id,
+        s.nom AS nom_site,
+        ed.date_distribution_prevue,
+        ed.heure_debut_prevue,
+        ed.heure_fin_prevue,
+        ed.type_assistance_prevue,
+        ed.quantite_totale_prevue,
+        ed.statut_evenement,
+        ed.date_creation,
+        ed.date_modification
+      FROM 
+        evenements_distribution ed
+      JOIN 
+        programmes_aide pa ON ed.programme_id = pa.programme_id
+      JOIN 
+        sites s ON ed.site_id = s.id
+      WHERE 
+        ed.evenement_id = ?
+    `, [evenement_id]);
+    
+    await connection.end();
+    
+    res.status(201).json({
+      success: true,
+      message: 'Événement créé avec succès',
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error('Erreur lors de la création de l\'événement:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erreur lors de la création de l\'événement: ' + error.message 
+    });
+  }
+});
+
+// PUT - Mettre à jour un événement de distribution
+router.put('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const evenement: EvenementDistribution = req.body;
+    
+    // Validation des données
+    if (!evenement.programme_id || !evenement.site_id || !evenement.date_distribution_prevue) {
+      return res.status(400).json({ 
+        success: false, 
+        error: 'Les champs programme_id, site_id et date_distribution_prevue sont obligatoires' 
+      });
+    }
+    
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Vérifier si l'événement existe
+    const [existingRows] = await connection.query(
+      'SELECT * FROM evenements_distribution WHERE evenement_id = ?',
+      [id]
+    );
+    
+    if (Array.isArray(existingRows) && existingRows.length === 0) {
+      await connection.end();
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Événement non trouvé' 
+      });
+    }
+    
+    // Préparer la date de modification
+    const date_modification = new Date().toISOString().slice(0, 19).replace('T', ' ');
+    
+    // Mettre à jour l'événement
+    await connection.query(`
+      UPDATE evenements_distribution
+      SET 
+        programme_id = ?,
+        site_id = ?,
+        date_distribution_prevue = ?,
+        heure_debut_prevue = ?,
+        heure_fin_prevue = ?,
+        type_assistance_prevue = ?,
+        quantite_totale_prevue = ?,
+        statut_evenement = ?,
+        date_modification = ?
+      WHERE evenement_id = ?
+    `, [
+      evenement.programme_id,
+      evenement.site_id,
+      evenement.date_distribution_prevue,
+      evenement.heure_debut_prevue,
+      evenement.heure_fin_prevue,
+      evenement.type_assistance_prevue,
+      evenement.quantite_totale_prevue,
+      evenement.statut_evenement,
+      date_modification,
+      id
+    ]);
+    
+    // Récupérer l'événement mis à jour
+    const [rows] = await connection.query(`
+      SELECT 
+        ed.evenement_id,
+        ed.programme_id,
+        pa.nom_programme,
+        ed.site_id,
+        s.nom AS nom_site,
+        ed.date_distribution_prevue,
+        ed.heure_debut_prevue,
+        ed.heure_fin_prevue,
+        ed.type_assistance_prevue,
+        ed.quantite_totale_prevue,
+        ed.statut_evenement,
+        ed.date_creation,
+        ed.date_modification
+      FROM 
+        evenements_distribution ed
+      JOIN 
+        programmes_aide pa ON ed.programme_id = pa.programme_id
+      JOIN 
+        sites s ON ed.site_id = s.id
+      WHERE 
+        ed.evenement_id = ?
+    `, [id]);
+    
+    await connection.end();
+    
+    res.json({
+      success: true,
+      message: 'Événement mis à jour avec succès',
+      data: rows[0]
+    });
+  } catch (error) {
+    console.error('Erreur lors de la mise à jour de l\'événement:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erreur lors de la mise à jour de l\'événement: ' + error.message 
+    });
+  }
+});
+
+// DELETE - Supprimer un événement de distribution
+router.delete('/:id', async (req, res) => {
+  try {
+    const { id } = req.params;
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Vérifier si l'événement existe
+    const [existingRows] = await connection.query(
+      'SELECT * FROM evenements_distribution WHERE evenement_id = ?',
+      [id]
+    );
+    
+    if (Array.isArray(existingRows) && existingRows.length === 0) {
+      await connection.end();
+      return res.status(404).json({ 
+        success: false, 
+        error: 'Événement non trouvé' 
+      });
+    }
+    
+    // Supprimer l'événement
+    await connection.query(
+      'DELETE FROM evenements_distribution WHERE evenement_id = ?',
+      [id]
+    );
+    
+    await connection.end();
+    
+    res.json({
+      success: true,
+      message: 'Événement supprimé avec succès'
+    });
+  } catch (error) {
+    console.error('Erreur lors de la suppression de l\'événement:', error);
+    res.status(500).json({ 
+      success: false, 
+      error: 'Erreur lors de la suppression de l\'événement: ' + error.message 
     });
   }
 });
