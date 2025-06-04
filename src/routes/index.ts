@@ -7,6 +7,7 @@ import programmesRoutes from './programmesRoutes';
 import evenementsRoutes from './evenementsRoutes';
 import assistancesRoutes from './assistancesRoutes';
 import reportsRoutes from './reportsRoutes';
+import waybillRoutes from './waybillRoutes';
 
 const router = Router();
 
@@ -24,6 +25,9 @@ router.use('/assistances-distribuees', assistancesRoutes);
 
 // Mount reports routes
 router.use('/reports', reportsRoutes);
+
+// Mount waybill routes
+router.use('/waybills', waybillRoutes);
 
 // Health check endpoint
 router.get('/health', async (_req: Request, res: Response) => {

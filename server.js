@@ -2183,6 +2183,116 @@ app.get('/api/sites', async (_req, res) => {
   }
 });
 
+// Endpoint pour récupérer les événements de distribution
+app.get('/api/evenements-distribution', async (req, res) => {
+  try {
+    console.log('Récupération des événements de distribution');
+    
+    // Créer une connexion à la base de données
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Vérifier si la table evenements_distribution existe
+    const [tables] = await connection.query(`
+      SELECT TABLE_NAME 
+      FROM information_schema.TABLES 
+      WHERE TABLE_SCHEMA = ? 
+      AND TABLE_NAME = 'evenements_distribution'
+    `, [dbConfig.database || 'gestion_distribution']);
+    
+    if (tables.length === 0) {
+      // Si la table n'existe pas, la créer
+      await connection.query(`
+        CREATE TABLE IF NOT EXISTS evenements_distribution (
+          id VARCHAR(36) PRIMARY KEY,
+          titre VARCHAR(255) NOT NULL,
+          description TEXT,
+          date_debut DATETIME NOT NULL,
+          date_fin DATETIME NOT NULL,
+          statut ENUM('planifié', 'en_cours', 'terminé', 'annulé') DEFAULT 'planifié',
+          site_id VARCHAR(36),
+          programme_id VARCHAR(36),
+          nom_programme VARCHAR(255),
+          nom_site VARCHAR(255),
+          date_distribution_prevue DATETIME,
+          type_assistance_prevue VARCHAR(255),
+          quantite_totale_prevue TEXT,
+          created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+          updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+          FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE SET NULL,
+          FOREIGN KEY (programme_id) REFERENCES programmes(id) ON DELETE SET NULL
+        )
+      `);
+      
+      // Insérer quelques données de test
+      await connection.query(`
+        INSERT INTO evenements_distribution (
+          id, 
+          titre, 
+          description, 
+          date_debut, 
+          date_fin, 
+          statut, 
+          site_id, 
+          programme_id, 
+          nom_programme, 
+          nom_site, 
+          date_distribution_prevue, 
+          type_assistance_prevue, 
+          quantite_totale_prevue
+        )
+        SELECT 
+          UUID(), 
+          CONCAT('Distribution à ', s.nom), 
+          CONCAT('Distribution de fournitures dans le cadre du programme ', p.nom), 
+          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY), 
+          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) + 1 DAY), 
+          'planifié',
+          s.id,
+          p.id,
+          p.nom,
+          s.nom,
+          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY),
+          'Ration alimentaire standard',
+          '{"riz": 500, "huile": 200, "sel": 100}'
+        FROM sites s, programmes p
+        LIMIT 5
+      `);
+      
+      console.log('Table evenements_distribution créée et données de test insérées');
+    }
+    
+    // Récupérer les données
+    const [rows] = await connection.query(`
+      SELECT 
+        id,
+        titre,
+        description,
+        date_debut,
+        date_fin,
+        statut,
+        site_id,
+        programme_id,
+        nom_programme,
+        nom_site,
+        date_distribution_prevue,
+        type_assistance_prevue,
+        quantite_totale_prevue,
+        created_at,
+        updated_at
+      FROM evenements_distribution
+      ORDER BY date_debut DESC
+    `);
+    
+    console.log(`${rows.length} événements de distribution trouvés`);
+    
+    await connection.end();
+    res.json(rows);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des événements de distribution:', error);
+    res.status(500).json({ error: String(error) });
+  }
+});
+
 // Start the server
 app.listen(PORT, () => {
   console.log(`Server running on http://localhost:${PORT}`);

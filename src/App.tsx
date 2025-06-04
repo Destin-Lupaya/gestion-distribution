@@ -8,6 +8,7 @@ import DetailedReports from './components/DetailedReports';
 import DistributionReport from './components/DistributionReport';
 import BatchCommodityReport from './components/BatchCommodityReport';
 import TonnageComparisonReport from './components/TonnageComparisonReport';
+import WaybillReport from './components/WaybillReport';
 import QRTester from './components/QRTester';
 import TestParser from './components/TestParser';
 import DataGridView from './components/DataGrid';
@@ -163,6 +164,10 @@ const router = createBrowserRouter([
           {
             path: 'tonnage-comparison-report',
             element: <TonnageComparisonReport />
+          },
+          {
+            path: 'waybill-report',
+            element: <WaybillReport />
           },
           {
             path: 'import',

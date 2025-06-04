@@ -558,6 +558,20 @@ function Navbar() {
                   </ListItemIcon>
                   <Typography>Comparaison Tonnage Waybill/MPOS</Typography>
                 </MenuItem>
+                <MenuItem 
+                  component={Link} 
+                  to="/app/waybill-report" 
+                  onClick={() => setReportMenuAnchor(null)}
+                  sx={{ 
+                    color: isActive('/app/waybill-report') ? 'primary.main' : 'inherit',
+                    fontWeight: isActive('/app/waybill-report') ? 600 : 400
+                  }}
+                >
+                  <ListItemIcon>
+                    <InventoryIcon fontSize="small" color={isActive('/app/waybill-report') ? 'primary' : 'inherit'} />
+                  </ListItemIcon>
+                  <Typography>Rapport des Waybills</Typography>
+                </MenuItem>
               </Menu>
             </Box>
             

@@ -115,8 +115,22 @@ const ReceptionWaybill: React.FC = () => {
   const fetchWaybillItems = async () => {
     setLoading(true);
     try {
-      const response = await apiService.get('/api/waybill-items');
-      setWaybillItems(response.data);
+      // Utiliser la route correcte pour les waybills
+      const response = await apiService.get('/api/waybills/report', {
+        startDate: new Date().toISOString().split('T')[0], // Date du jour
+        endDate: new Date().toISOString().split('T')[0],   // Date du jour
+        limit: '100' // Récupérer jusqu'à 100 éléments
+      });
+      
+      // Vérifier si la réponse est valide et contient des données
+      if (response && response.data) {
+        // S'assurer que response.data est un tableau
+        setWaybillItems(Array.isArray(response.data) ? response.data : []);
+      } else {
+        // Si la réponse n'a pas le format attendu
+        console.error('Format de réponse invalide:', response);
+        setWaybillItems([]);
+      }
     } catch (error) {
       console.error('Erreur lors du chargement des données du waybill:', error);
       setSnackbar({
@@ -124,13 +138,15 @@ const ReceptionWaybill: React.FC = () => {
         message: 'Impossible de charger les données du waybill',
         severity: 'error'
       });
+      // Réinitialiser à un tableau vide en cas d'erreur
+      setWaybillItems([]);
     } finally {
       setLoading(false);
     }
   };
 
   // Filtrer les éléments selon le terme de recherche
-  const filteredItems = waybillItems ? waybillItems.filter(item => {
+  const filteredItems = Array.isArray(waybillItems) ? waybillItems.filter(item => {
     if (!item) return false;
     const searchLower = searchTerm.toLowerCase();
     return (
@@ -163,7 +179,10 @@ const ReceptionWaybill: React.FC = () => {
     
     try {
       await apiService.delete(`/api/waybill-items/${id}`);
-      setWaybillItems(waybillItems.filter(item => item.id !== id));
+      // S'assurer que waybillItems est un tableau avant de le filtrer
+      if (Array.isArray(waybillItems)) {
+        setWaybillItems(waybillItems.filter(item => item.id !== id));
+      }
       setSnackbar({
         open: true,
         message: 'Élément supprimé avec succès',
@@ -182,12 +201,34 @@ const ReceptionWaybill: React.FC = () => {
   // Gérer les changements dans le formulaire
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
+    
+    // Déterminer si le champ est numérique
+    const isNumericField = name.includes('quantity') || name.includes('tonne') || 
+                          name.includes('loss') || name.includes('mount') || 
+                          name.includes('return');
+    
+    // Mettre à jour l'élément courant
     setCurrentItem({
       ...currentItem,
-      [name]: name.includes('quantity') || name.includes('tonne') || name.includes('loss') || name.includes('mount') || name.includes('return') 
-        ? parseFloat(value) || 0 
-        : value
+      [name]: isNumericField ? parseFloat(value) || 0 : value
     });
+    
+    // Si c'est le champ commodity_specific, on peut automatiquement déterminer le type
+    if (name === 'commodity_specific' && value) {
+      const valueLower = value.toLowerCase();
+      let type = currentItem.type;
+      
+      // Déterminer automatiquement le type en fonction du produit
+      if (valueLower.includes('huile') || valueLower.includes('farine') || 
+          valueLower.includes('haricot') || valueLower.includes('sel')) {
+        type = 'Food';
+      }
+      
+      // Mettre à jour le type si nécessaire
+      if (type !== currentItem.type) {
+        setCurrentItem(prev => ({ ...prev, type }));
+      }
+    }
   };
 
   // Gérer les changements dans les sélecteurs
@@ -210,7 +251,29 @@ const ReceptionWaybill: React.FC = () => {
   // Calculer automatiquement les tonnes en fonction de la quantité et du type de produit
   useEffect(() => {
     if (currentItem.quantity_sent && currentItem.quantity_sent > 0) {
-      const tonneSent = currentItem.unit_sent === 'kg' ? (currentItem.quantity_sent || 0) / 1000 : 0;
+      let tonneSent = 0;
+      // Calculer le tonnage envoyé en fonction de l'unité
+      if (currentItem.unit_sent === 'kg') {
+        tonneSent = (currentItem.quantity_sent || 0) / 1000;
+      } else {
+        // Déterminer le poids unitaire pour le calcul du tonnage envoyé
+        const commodityLower = (currentItem.commodity_specific || '').toLowerCase();
+        let poidsUnitaire = 0;
+        
+        if (commodityLower.includes('huile')) {
+          poidsUnitaire = 20; // 20kg par carton d'huile
+        } else if (commodityLower.includes('farine')) {
+          poidsUnitaire = 25; // 25kg par sac de farine
+        } else if (commodityLower.includes('haricot')) {
+          poidsUnitaire = 50; // 50kg par sac de haricot
+        } else if (commodityLower.includes('sel')) {
+          poidsUnitaire = 25; // 25kg par sac de sel
+        } else {
+          poidsUnitaire = 1; // Valeur par défaut
+        }
+        
+        tonneSent = ((currentItem.quantity_sent || 0) * poidsUnitaire) / 1000;
+      }
       setCurrentItem(prev => ({ ...prev, tonne_sent: tonneSent }));
     }
     
@@ -221,16 +284,22 @@ const ReceptionWaybill: React.FC = () => {
       
       if (commodityLower.includes('huile')) {
         // Poids d'un carton d'huile (en kg)
-        poidsUnitaire = 20; // Exemple: 20kg par carton d'huile
+        poidsUnitaire = 20; // 20kg par carton d'huile
       } else if (commodityLower.includes('farine')) {
         // Poids d'un sac de farine (en kg)
-        poidsUnitaire = 25; // Exemple: 25kg par sac de farine
+        poidsUnitaire = 25; // 25kg par sac de farine
       } else if (commodityLower.includes('haricot')) {
         // Poids d'un sac de haricot (en kg)
-        poidsUnitaire = 50; // Exemple: 50kg par sac de haricot
+        poidsUnitaire = 50; // 50kg par sac de haricot
+      } else if (commodityLower.includes('sel')) {
+        // Poids d'un sac de sel (en kg)
+        poidsUnitaire = 25; // 25kg par sac de sel
+      } else if (currentItem.unit_received === 'kg') {
+        // Pour les autres produits en kg, utiliser la conversion standard
+        poidsUnitaire = 1;
       } else {
-        // Pour les autres produits, utiliser la conversion standard
-        poidsUnitaire = currentItem.unit_received === 'kg' ? 1 : 0;
+        // Pour les autres unités, déterminer selon le cas
+        poidsUnitaire = 0;
       }
       
       // Calculer le tonnage en fonction du poids unitaire
@@ -250,7 +319,10 @@ const ReceptionWaybill: React.FC = () => {
     try {
       if (isEditing && currentItem.id) {
         await apiService.put(`/api/waybill-items/${currentItem.id}`, currentItem);
-        setWaybillItems(waybillItems.map(item => item.id === currentItem.id ? currentItem : item));
+        // S'assurer que waybillItems est un tableau avant d'utiliser map
+        if (Array.isArray(waybillItems)) {
+          setWaybillItems(waybillItems.map(item => item.id === currentItem.id ? currentItem : item));
+        }
         setSnackbar({
           open: true,
           message: 'Élément mis à jour avec succès',
@@ -258,7 +330,8 @@ const ReceptionWaybill: React.FC = () => {
         });
       } else {
         const response = await apiService.post('/api/waybill-items', currentItem);
-        setWaybillItems([...waybillItems, response.data]);
+        // S'assurer que waybillItems est un tableau avant d'utiliser le spread operator
+        setWaybillItems(Array.isArray(waybillItems) ? [...waybillItems, response.data] : [response.data]);
         setSnackbar({
           open: true,
           message: 'Nouvel élément ajouté avec succès',
@@ -328,6 +401,7 @@ const ReceptionWaybill: React.FC = () => {
                 <TableCell align="right">Qty Received</TableCell>
                 <TableCell>Unit</TableCell>
                 <TableCell align="right">Tonne Received</TableCell>
+                <TableCell>Poids Unitaire (kg)</TableCell>
                 <TableCell>Obs</TableCell>
                 <TableCell align="right">Loss</TableCell>
                 <TableCell align="right">Mount In</TableCell>
@@ -360,6 +434,16 @@ const ReceptionWaybill: React.FC = () => {
                     <TableCell align="right">{item.quantity || 0}</TableCell>
                     <TableCell>{item.unit_received || ''}</TableCell>
                     <TableCell align="right">{(item.tonne_received || 0).toFixed(3)}</TableCell>
+                    <TableCell>
+                      {(() => {
+                        const commodityLower = (item.commodity_specific || '').toLowerCase();
+                        if (commodityLower.includes('huile')) return '20';
+                        if (commodityLower.includes('farine')) return '25';
+                        if (commodityLower.includes('haricot')) return '50';
+                        if (commodityLower.includes('sel')) return '25';
+                        return item.unit_received === 'kg' ? '1' : '0';
+                      })()}
+                    </TableCell>
                     <TableCell>{item.obs}</TableCell>
                     <TableCell align="right">{item.loss}</TableCell>
                     <TableCell align="right">{item.mount_in}</TableCell>
