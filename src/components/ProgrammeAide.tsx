@@ -18,7 +18,6 @@ import {
   TableRow,
   IconButton,
   CircularProgress,
-  Snackbar,
   Alert,
   FormControl,
   InputLabel,
@@ -78,12 +77,21 @@ const ProgrammeAide: React.FC = () => {
     setLoading(true);
     try {
       const response = await apiService.get('/api/programmes');
-      setProgrammes(response.data);
+      // Vérification que response.data est un tableau
+      if (Array.isArray(response.data)) {
+        setProgrammes(response.data);
+      } else {
+        // Si ce n'est pas un tableau, initialiser avec un tableau vide
+        console.warn('Les données reçues ne sont pas un tableau:', response.data);
+        setProgrammes([]);
+      }
       setError(null);
     } catch (err) {
       console.error('Erreur lors du chargement des programmes:', err);
       setError('Impossible de charger les programmes. Veuillez réessayer plus tard.');
       toast.error('Erreur lors du chargement des programmes');
+      // Initialiser avec un tableau vide en cas d'erreur
+      setProgrammes([]);
     } finally {
       setLoading(false);
     }
@@ -192,19 +200,26 @@ const ProgrammeAide: React.FC = () => {
 
   return (
     <PageTransition>
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h4" gutterBottom>
+      <Box sx={{ p: 3, maxWidth: '1200px', margin: '0 auto' }}>
+        <Typography variant="h4" gutterBottom sx={{ color: '#003C5F', fontWeight: 700, mb: 3 }}>
           Gestion des Programmes d'Aide
         </Typography>
         
-        <Paper elevation={3} sx={{ p: 3, mb: 3 }}>
+        <Paper elevation={3} sx={{ p: 3, mb: 3, borderRadius: '12px', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-            <Typography variant="h6">Liste des programmes</Typography>
+            <Typography variant="h6" sx={{ color: '#003C5F', fontWeight: 600 }}>Liste des programmes</Typography>
             <Button 
               variant="contained" 
               color="primary" 
               startIcon={<AddCircleOutlineIcon />} 
               onClick={() => handleOpenDialog()}
+              sx={{ 
+                background: 'linear-gradient(45deg, #0078BE 30%, #0091E6 90%)',
+                boxShadow: '0 3px 5px 2px rgba(0, 120, 190, .3)',
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600
+              }}
             >
               Nouveau Programme
             </Button>
@@ -212,38 +227,79 @@ const ProgrammeAide: React.FC = () => {
           
           {loading ? (
             <Box sx={{ display: 'flex', justifyContent: 'center', p: 3 }}>
-              <CircularProgress />
+              <CircularProgress sx={{ color: '#0078BE' }} />
             </Box>
           ) : error ? (
-            <Alert severity="error">{error}</Alert>
-          ) : programmes.length === 0 ? (
-            <Alert severity="info">Aucun programme d'aide n'a été créé.</Alert>
+            <Alert 
+              severity="error" 
+              sx={{ 
+                borderRadius: '8px', 
+                boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+                '& .MuiAlert-icon': {
+                  color: '#D32F2F'
+                }
+              }}
+              variant="filled"
+            >
+              {error}
+            </Alert>
+          ) : programmes && programmes.length === 0 ? (
+            <Alert 
+              severity="info" 
+              sx={{ 
+                borderRadius: '8px',
+                backgroundColor: 'rgba(2, 132, 199, 0.08)',
+                border: '1px solid rgba(2, 132, 199, 0.2)',
+                '& .MuiAlert-icon': {
+                  color: '#0284c7'
+                }
+              }}
+              variant="outlined"
+            >
+              Aucun programme d'aide n'a été créé.
+            </Alert>
           ) : (
-            <TableContainer>
-              <Table>
-                <TableHead>
+            <TableContainer component={Paper} sx={{ borderRadius: '12px', overflow: 'hidden', boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)' }}>
+              <Table sx={{ minWidth: 650 }}>
+                <TableHead sx={{ backgroundColor: '#f5f5f5' }}>
                   <TableRow>
-                    <TableCell>Nom du Programme</TableCell>
-                    <TableCell>Organisation</TableCell>
-                    <TableCell>Date de début</TableCell>
-                    <TableCell>Date de fin</TableCell>
-                    <TableCell>Description</TableCell>
-                    <TableCell>Actions</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Nom du Programme</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Organisation</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Date de début</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Date de fin</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Description</TableCell>
+                    <TableCell sx={{ fontWeight: 700 }}>Actions</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {programmes.map((programme) => (
                     <TableRow key={programme.programme_id}>
-                      <TableCell>{programme.nom_programme}</TableCell>
-                      <TableCell>{programme.organisation_responsable}</TableCell>
-                      <TableCell>{new Date(programme.date_debut).toLocaleDateString()}</TableCell>
-                      <TableCell>{new Date(programme.date_fin).toLocaleDateString()}</TableCell>
-                      <TableCell>{programme.description}</TableCell>
-                      <TableCell>
-                        <IconButton onClick={() => handleOpenDialog(programme)} color="primary">
+                      <TableCell sx={{ fontWeight: 700 }}>{programme.nom_programme}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{programme.organisation_responsable}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{new Date(programme.date_debut).toLocaleDateString()}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{new Date(programme.date_fin).toLocaleDateString()}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>{programme.description}</TableCell>
+                      <TableCell sx={{ fontWeight: 700 }}>
+                        <IconButton 
+                          onClick={() => handleOpenDialog(programme)} 
+                          color="primary"
+                          sx={{ 
+                            '&:hover': { 
+                              backgroundColor: 'rgba(0, 120, 190, 0.1)' 
+                            } 
+                          }}
+                        >
                           <EditIcon />
                         </IconButton>
-                        <IconButton onClick={() => handleDeleteProgramme(programme.programme_id)} color="error">
+                        <IconButton 
+                          onClick={() => handleDeleteProgramme(programme.programme_id)} 
+                          color="error"
+                          sx={{ 
+                            '&:hover': { 
+                              backgroundColor: 'rgba(211, 47, 47, 0.1)' 
+                            } 
+                          }}
+                        >
                           <DeleteIcon />
                         </IconButton>
                       </TableCell>
@@ -257,8 +313,26 @@ const ProgrammeAide: React.FC = () => {
       </Box>
 
       {/* Dialogue pour créer/éditer un programme */}
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="md" fullWidth>
-        <DialogTitle>
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="md" 
+        fullWidth
+        PaperProps={{
+          sx: {
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+            padding: '8px'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          fontSize: '1.5rem', 
+          fontWeight: 600, 
+          color: '#003C5F',
+          borderBottom: '1px solid #eaeaea',
+          pb: 2
+        }}>
           {editingProgramme ? 'Modifier le programme' : 'Créer un nouveau programme'}
         </DialogTitle>
         <DialogContent>
@@ -322,9 +396,30 @@ const ProgrammeAide: React.FC = () => {
             </Grid>
           </Grid>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog} color="inherit">Annuler</Button>
-          <Button onClick={handleSubmit} color="primary" variant="contained">
+        <DialogActions sx={{ padding: '16px 24px', borderTop: '1px solid #eaeaea' }}>
+          <Button 
+            onClick={handleCloseDialog} 
+            color="inherit"
+            sx={{ 
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 500
+            }}
+          >
+            Annuler
+          </Button>
+          <Button 
+            onClick={handleSubmit} 
+            color="primary" 
+            variant="contained"
+            sx={{ 
+              background: 'linear-gradient(45deg, #0078BE 30%, #0091E6 90%)',
+              boxShadow: '0 3px 5px 2px rgba(0, 120, 190, .3)',
+              borderRadius: '8px',
+              textTransform: 'none',
+              fontWeight: 600
+            }}
+          >
             {editingProgramme ? 'Mettre à jour' : 'Créer'}
           </Button>
         </DialogActions>

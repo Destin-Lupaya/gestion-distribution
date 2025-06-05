@@ -27,7 +27,7 @@ import HomeIcon from '@mui/icons-material/Home';
 import PersonAddIcon from '@mui/icons-material/PersonAdd';
 import AccountCircleIcon from '@mui/icons-material/AccountCircle';
 import LogoutIcon from '@mui/icons-material/Logout';
-import SearchIcon from '@mui/icons-material/Search';
+// import SearchIcon from '@mui/icons-material/Search';
 import EventIcon from '@mui/icons-material/Event';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import PeopleIcon from '@mui/icons-material/People';
@@ -122,9 +122,9 @@ function Navbar() {
       position="sticky" 
       elevation={4}
       sx={{
-        backgroundColor: 'primary.main',
+        backgroundColor: '#0078BE',
         borderBottom: 'none',
-        boxShadow: '0 3px 5px rgba(0,0,0,0.2)',
+        boxShadow: '0 4px 6px rgba(0,0,0,0.1)',
       }}
     >
       <Container maxWidth="lg">
@@ -135,13 +135,13 @@ function Navbar() {
               variant="h5" 
               component="div"
               sx={{ 
-                fontWeight: 700,
+                fontWeight: 800,
                 color: '#FFFFFF',
                 letterSpacing: '-0.5px',
                 display: 'flex',
                 alignItems: 'center',
-                textShadow: '0 1px 2px rgba(0,0,0,0.1)',
-                fontSize: '1.5rem'
+                textShadow: '0 1px 2px rgba(0,0,0,0.2)',
+                fontSize: '1.6rem'
               }}
             >
               GESTION DISTRIBUTION
@@ -322,7 +322,7 @@ function Navbar() {
                   </ListItemIcon>
                   Collecte de signatures
                 </MenuItem>
-                {user?.roles?.includes('distribution') && (
+                {user?.role === 'distribution' && (
                   <MenuItem 
                     component={Link} 
                     to="/app/pending-distributions" 
@@ -576,7 +576,7 @@ function Navbar() {
             </Box>
             
             {/* Menu Gestion Avancée des Distributions */}
-            {(user?.roles?.includes('admin') || user?.roles?.includes('manager')) && (
+            {user?.role === 'admin' && (
               <Box sx={{ position: 'relative', mx: 1 }}>
                 <Button
                   sx={{

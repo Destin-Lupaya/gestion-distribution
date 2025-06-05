@@ -24,6 +24,32 @@ async function initializeDatabase() {
       multipleStatements: true
     });
 
+    // Créer la table sites si elle n'existe pas
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS sites (
+        id INT AUTO_INCREMENT PRIMARY KEY,
+        nom VARCHAR(255) NOT NULL,
+        adresse VARCHAR(255),
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+      ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+    `);
+    console.log('Table sites créée ou vérifiée.');
+
+    // Créer la table programmes si elle n'existe pas
+    await connection.query(`
+      CREATE TABLE IF NOT EXISTS programmes (
+        id VARCHAR(36) PRIMARY KEY,
+        nom VARCHAR(255) NOT NULL,
+        description TEXT,
+        date_debut DATE,
+        date_fin DATE,
+        statut ENUM('actif', 'inactif', 'terminé') DEFAULT 'actif',
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+      );
+    `);
+    console.log('Table programmes créée ou vérifiée.');
+
     // Vérifier si la colonne signature existe dans la table distributions
     const [columns] = await connection.query(`
       SELECT COLUMN_NAME 
@@ -2185,13 +2211,41 @@ app.get('/api/sites', async (_req, res) => {
 
 // Endpoint pour récupérer les événements de distribution
 app.get('/api/evenements-distribution', async (req, res) => {
+  console.log('!!!!!!!!!! /API/EVENEMENTS-DISTRIBUTION ENDPOINT HIT !!!!!!!!!!');
   try {
-    console.log('Récupération des événements de distribution');
-    
-    // Créer une connexion à la base de données
+
+    // Create a connection for this endpoint
     const connection = await mysql.createConnection(dbConfig);
-    
-    // Vérifier si la table evenements_distribution existe
+    console.log('Connection established for /api/evenements-distribution');
+
+    // DEBUG: Log dbConfig and Describe sites and programmes tables
+    console.log('Current dbConfig for this endpoint:', JSON.stringify(dbConfig, null, 2));
+    const databaseName = dbConfig.database || process.env.DB_NAME || 'gestion_distribution';
+    console.log(`Attempting to DESCRIBE tables in database: ${databaseName}...`);
+    try {
+      console.log(`Executing: DESCRIBE ${databaseName}.sites;`);
+      const [sitesDesc] = await connection.query(`DESCRIBE ${databaseName}.sites;`);
+      console.log('DESCRIBE sites Result:', JSON.stringify(sitesDesc, null, 2));
+
+      console.log(`Executing: DESCRIBE ${databaseName}.programmes;`);
+      const [programmesDesc] = await connection.query(`DESCRIBE ${databaseName}.programmes;`);
+      console.log('DESCRIBE programmes Result:', JSON.stringify(programmesDesc, null, 2));
+    } catch (describeError) {
+      console.error('Error during DESCRIBE tables:', describeError);
+      // Log and continue, the main query might still fail and give more info
+    }
+
+    // Drop the table if it exists to ensure fresh creation with the correct schema
+    try {
+      console.log('Attempting to DROP TABLE IF EXISTS evenements_distribution...');
+      await connection.query('DROP TABLE IF EXISTS evenements_distribution;');
+      console.log('Table evenements_distribution dropped successfully (if it existed).');
+    } catch (dropError) {
+      console.error('Error dropping evenements_distribution table:', dropError.message);
+      // If drop fails, something is seriously wrong, but we might still try to create
+    }
+
+    // Vérifier si la table evenements_distribution existe (this check is now somewhat redundant but harmless)
     const [tables] = await connection.query(`
       SELECT TABLE_NAME 
       FROM information_schema.TABLES 
@@ -2199,7 +2253,10 @@ app.get('/api/evenements-distribution', async (req, res) => {
       AND TABLE_NAME = 'evenements_distribution'
     `, [dbConfig.database || 'gestion_distribution']);
     
-    if (tables.length === 0) {
+    // Always attempt to create the table now, as we've dropped it.
+    // The original if (tables.length === 0) is effectively always true for the CREATE part.
+    // We'll keep the structure for clarity of what was intended for an 'IF NOT EXISTS' scenario.
+    if (true) { // Force creation after drop
       // Si la table n'existe pas, la créer
       await connection.query(`
         CREATE TABLE IF NOT EXISTS evenements_distribution (

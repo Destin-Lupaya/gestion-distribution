@@ -22,12 +22,16 @@ import {
   MenuItem,
   Grid,
   Snackbar,
-  Alert
+  Alert,
+  CircularProgress,
+  Tooltip
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
 import SearchIcon from '@mui/icons-material/Search';
+import PersonSearchIcon from '@mui/icons-material/PersonSearch';
+import { Link } from 'react-router-dom';
 import { PageTransition } from './PageTransition';
 import { AdapterDayjs } from '@mui/x-date-pickers/AdapterDayjs';
 import { LocalizationProvider, DatePicker } from '@mui/x-date-pickers';
@@ -356,70 +360,177 @@ const ReceptionWaybill: React.FC = () => {
 
   return (
     <PageTransition>
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Réception des Waybills
+      <Box sx={{ p: 3, maxWidth: '1400px', mx: 'auto' }}>
+        <Typography 
+          variant="h4" 
+          className="section-header"
+          sx={{ 
+            mb: 3, 
+            fontWeight: 600,
+            color: '#0f172a',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}
+        >
+          <span>Réception des Waybills</span>
         </Typography>
 
         {/* Barre de recherche et bouton d'ajout */}
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', width: '60%' }}>
+        <Paper 
+          elevation={2} 
+          sx={{ 
+            p: 3, 
+            mb: 4, 
+            borderRadius: '12px',
+            backgroundColor: '#ffffff'
+          }}
+        >
+          <Box sx={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center', 
+            mb: 2 
+          }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: '#003C5F' }}>
+              Gestion des Waybills
+            </Typography>
+            <Box sx={{ display: 'flex', gap: 2 }}>
+              <Tooltip title="Recherche des bénéficiaires">
+                <Button
+                  component={Link}
+                  to="/recherche-beneficiaires"
+                  variant="outlined"
+                  color="primary"
+                  startIcon={<PersonSearchIcon />}
+                  sx={{ 
+                    borderRadius: '8px',
+                    textTransform: 'none',
+                    fontWeight: 600,
+                    px: 3,
+                    py: 1,
+                    borderColor: '#0078BE',
+                    color: '#0078BE',
+                    '&:hover': {
+                      borderColor: '#0091E6',
+                      backgroundColor: 'rgba(0, 120, 190, 0.08)'
+                    }
+                  }}
+                >
+                  Rechercher bénéficiaires
+                </Button>
+              </Tooltip>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={handleAddNew}
+                sx={{ 
+                  borderRadius: '8px',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  px: 3,
+                  py: 1,
+                  background: 'linear-gradient(45deg, #0078BE 30%, #0091E6 90%)',
+                  boxShadow: '0 2px 8px rgba(0, 120, 190, 0.3)'
+                }}
+              >
+                Ajouter un waybill
+              </Button>
+            </Box>
+          </Box>
+          
+          <Box sx={{ display: 'flex', alignItems: 'center', width: '100%', mt: 3 }}>
             <TextField
-              label="Rechercher"
+              label="Rechercher un waybill"
               variant="outlined"
               size="small"
               fullWidth
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
+              sx={{
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: '8px',
+                  '& fieldset': {
+                    borderColor: '#e2e8f0',
+                    borderWidth: '1.5px'
+                  },
+                  '&:hover fieldset': {
+                    borderColor: '#94a3b8',
+                  },
+                  '&.Mui-focused fieldset': {
+                    borderColor: '#0078BE',
+                  }
+                }
+              }}
               InputProps={{
-                endAdornment: <SearchIcon />
+                endAdornment: <SearchIcon sx={{ color: '#64748b' }} />
               }}
             />
           </Box>
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={handleAddNew}
-          >
-            Ajouter
-          </Button>
-        </Box>
+        </Paper>
 
         {/* Tableau des données */}
-        <TableContainer component={Paper} sx={{ mb: 4, overflowX: 'auto' }}>
-          <Table size="small">
+        <Paper 
+          elevation={2}
+          sx={{ 
+            mb: 4, 
+            overflowX: 'auto',
+            borderRadius: '12px',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
+          }}
+        >
+          <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, color: '#003C5F' }}>
+              Liste des Waybills
+            </Typography>
+            <Typography variant="body2" sx={{ color: '#64748b' }}>
+              {filteredItems.length} waybills trouvés
+            </Typography>
+          </Box>
+          <TableContainer sx={{ maxHeight: '600px' }}>
+          <Table size="small" stickyHeader>
             <TableHead>
-              <TableRow>
-                <TableCell>Waybill #</TableCell>
-                <TableCell>Batch #</TableCell>
-                <TableCell>Commodity</TableCell>
-                <TableCell>Type</TableCell>
-                <TableCell align="right">Qty Sent</TableCell>
-                <TableCell>Unit</TableCell>
-                <TableCell align="right">Tonne Sent</TableCell>
-                <TableCell align="right">Qty Received</TableCell>
-                <TableCell>Unit</TableCell>
-                <TableCell align="right">Tonne Received</TableCell>
-                <TableCell>Poids Unitaire (kg)</TableCell>
-                <TableCell>Obs</TableCell>
-                <TableCell align="right">Loss</TableCell>
-                <TableCell align="right">Mount In</TableCell>
-                <TableCell align="right">Return</TableCell>
-                <TableCell>Activity</TableCell>
-                <TableCell>Date</TableCell>
-                <TableCell>Location</TableCell>
-                <TableCell>Actions</TableCell>
+              <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Waybill #</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Batch #</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Commodity</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Type</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Qty Sent</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Unit</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Tonne Sent</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Qty Received</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Unit</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Tonne Received</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Poids Unitaire (kg)</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Obs</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Loss</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Mount In</TableCell>
+                <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Return</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Activity</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Date</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Location</TableCell>
+                <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Actions</TableCell>
               </TableRow>
             </TableHead>
             <TableBody>
               {loading ? (
                 <TableRow>
-                  <TableCell colSpan={18} align="center">Chargement...</TableCell>
+                  <TableCell colSpan={18} align="center" sx={{ py: 4 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+                      <CircularProgress size={40} sx={{ mb: 2, color: '#0078BE' }} />
+                      <Typography variant="body2" sx={{ color: '#64748b' }}>Chargement des données...</Typography>
+                    </Box>
+                  </TableCell>
                 </TableRow>
               ) : filteredItems.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={18} align="center">Aucune donnée disponible</TableCell>
+                  <TableCell colSpan={18} align="center" sx={{ py: 4 }}>
+                    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', flexDirection: 'column' }}>
+                      <Typography variant="body1" sx={{ color: '#64748b', mb: 1 }}>Aucune donnée disponible</Typography>
+                      <Typography variant="body2" sx={{ color: '#94a3b8' }}>Utilisez le bouton "Ajouter" pour créer un nouveau waybill</Typography>
+                    </Box>
+                  </TableCell>
                 </TableRow>
               ) : (
                 filteredItems.map((item) => (
@@ -452,10 +563,24 @@ const ReceptionWaybill: React.FC = () => {
                     <TableCell>{item.date}</TableCell>
                     <TableCell>{item.location}</TableCell>
                     <TableCell>
-                      <IconButton size="small" onClick={() => handleEdit(item)}>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleEdit(item)}
+                        sx={{ 
+                          color: '#0078BE',
+                          '&:hover': { backgroundColor: 'rgba(0, 120, 190, 0.08)' }
+                        }}
+                      >
                         <EditIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" onClick={() => handleDelete(item.id)}>
+                      <IconButton 
+                        size="small" 
+                        onClick={() => handleDelete(item.id)}
+                        sx={{ 
+                          color: '#ef4444',
+                          '&:hover': { backgroundColor: 'rgba(239, 68, 68, 0.08)' }
+                        }}
+                      >
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </TableCell>
@@ -464,11 +589,34 @@ const ReceptionWaybill: React.FC = () => {
               )}
             </TableBody>
           </Table>
-        </TableContainer>
+          </TableContainer>
+        </Paper>
 
         {/* Dialogue pour ajouter/modifier un élément */}
-        <Dialog open={openDialog} onClose={() => setOpenDialog(false)} maxWidth="md" fullWidth>
-          <DialogTitle>{isEditing ? 'Modifier l\'élément' : 'Ajouter un nouvel élément'}</DialogTitle>
+        <Dialog 
+          open={openDialog} 
+          onClose={() => setOpenDialog(false)} 
+          maxWidth="md" 
+          fullWidth
+          PaperProps={{
+            sx: {
+              borderRadius: '12px',
+              boxShadow: '0 10px 35px rgba(0, 0, 0, 0.1)',
+              overflow: 'hidden'
+            }
+          }}
+        >
+          <DialogTitle sx={{ 
+            backgroundColor: '#f8fafc', 
+            borderBottom: '1px solid #e2e8f0',
+            py: 2,
+            '& .MuiTypography-root': {
+              fontWeight: 600,
+              color: '#0f172a'
+            }
+          }}>
+            {isEditing ? 'Modifier le waybill' : 'Ajouter un nouveau waybill'}
+          </DialogTitle>
           <DialogContent>
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12} sm={6}>
@@ -652,9 +800,32 @@ const ReceptionWaybill: React.FC = () => {
               </Grid>
             </Grid>
           </DialogContent>
-          <DialogActions>
-            <Button onClick={() => setOpenDialog(false)}>Annuler</Button>
-            <Button onClick={handleSubmit} variant="contained" color="primary">
+          <DialogActions sx={{ borderTop: '1px solid #e2e8f0', py: 2, px: 3 }}>
+            <Button 
+              onClick={() => setOpenDialog(false)}
+              sx={{ 
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 500,
+                color: '#64748b'
+              }}
+            >
+              Annuler
+            </Button>
+            <Button 
+              onClick={handleSubmit} 
+              variant="contained" 
+              color="primary"
+              sx={{ 
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+                px: 3,
+                py: 1,
+                background: 'linear-gradient(45deg, #0078BE 30%, #0091E6 90%)',
+                boxShadow: '0 2px 8px rgba(0, 120, 190, 0.3)'
+              }}
+            >
               {isEditing ? 'Mettre à jour' : 'Ajouter'}
             </Button>
           </DialogActions>
@@ -665,9 +836,18 @@ const ReceptionWaybill: React.FC = () => {
           open={snackbar.open}
           autoHideDuration={6000}
           onClose={handleCloseSnackbar}
-          anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+          <Alert 
+            onClose={handleCloseSnackbar} 
+            severity={snackbar.severity} 
+            variant="filled"
+            sx={{ 
+              width: '100%',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              borderRadius: '8px',
+            }}
+          >
             {snackbar.message}
           </Alert>
         </Snackbar>

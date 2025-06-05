@@ -37,6 +37,75 @@ interface BeneficiaryInfo {
 }
 
 export default function SignatureCollection() {
+  // Styles personnalisés pour le composant
+  const styles = {
+    container: {
+      maxWidth: '1200px',
+      margin: '0 auto',
+      padding: '24px',
+      borderRadius: '12px',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+      backgroundColor: '#ffffff'
+    },
+    header: {
+      marginBottom: '24px',
+      borderBottom: '1px solid #e0e0e0',
+      paddingBottom: '16px'
+    },
+    title: {
+      fontWeight: 600,
+      color: '#1a365d',
+      fontSize: '1.5rem'
+    },
+    subtitle: {
+      color: '#4a5568',
+      marginTop: '8px'
+    },
+    tabsContainer: {
+      marginBottom: '24px',
+      borderBottom: '1px solid #e0e0e0'
+    },
+    tab: {
+      fontWeight: 500,
+      textTransform: 'none',
+      minWidth: '120px'
+    },
+    button: {
+      textTransform: 'none',
+      fontWeight: 500,
+      borderRadius: '8px',
+      padding: '8px 16px',
+      boxShadow: '0 2px 10px rgba(0, 0, 0, 0.1)',
+      background: 'linear-gradient(45deg, #1976d2, #2196f3)',
+      '&:hover': {
+        background: 'linear-gradient(45deg, #1565c0, #1976d2)'
+      }
+    },
+    secondaryButton: {
+      textTransform: 'none',
+      fontWeight: 500,
+      borderRadius: '8px',
+      padding: '8px 16px'
+    },
+    formContainer: {
+      marginTop: '24px'
+    },
+    formField: {
+      marginBottom: '16px'
+    },
+    infoCard: {
+      padding: '16px',
+      borderRadius: '8px',
+      backgroundColor: '#f0f7ff',
+      border: '1px solid #bae6fd',
+      marginBottom: '16px'
+    },
+    errorMessage: {
+      color: '#e53e3e',
+      marginTop: '8px',
+      fontSize: '0.875rem'
+    }
+  };
   const [activeTab, setActiveTab] = useState(0);
   const [signaturePad, setSignaturePad] = useState<SignaturePad | null>(null);
   const [beneficiaryInfo, setBeneficiaryInfo] = useState<any>(null);
@@ -331,11 +400,7 @@ export default function SignatureCollection() {
     }
   };
 
-  const handleClear = () => {
-    if (signaturePad) {
-      signaturePad.clear();
-    }
-  };
+  // Cette fonction est utilisée directement dans les onClick des boutons d'effacement
 
   const handleSave = async () => {
     if (signaturePad && !signaturePad.isEmpty()) {
@@ -422,20 +487,35 @@ export default function SignatureCollection() {
   };
 
   return (
-    <Box sx={{ maxWidth: 1200, mx: 'auto', p: 3 }}>
-      <Typography variant="h4" gutterBottom align="center">
-        Collection des Signatures
-      </Typography>
-
-      <Tabs
-        value={activeTab}
-        onChange={(_, newValue) => setActiveTab(newValue)}
-        centered
-        sx={{ mb: 3 }}
-      >
-        <Tab label="Scanner QR Code" />
-        <Tab label="Émargement Manuel" />
-      </Tabs>
+    <Box sx={{ p: 3, backgroundColor: '#f8fafc' }}>
+      <Paper elevation={3} sx={styles.container}>
+        <Box sx={styles.header}>
+          <Typography variant="h5" sx={styles.title}>
+            Collecte de Signatures
+          </Typography>
+          <Typography variant="body1" sx={styles.subtitle}>
+            Recherchez un bénéficiaire et collectez sa signature pour confirmer la distribution
+          </Typography>
+        </Box>
+        <Tabs 
+          value={activeTab} 
+          onChange={(_, newValue) => setActiveTab(newValue)} 
+          sx={{ 
+            mb: 3,
+            '& .MuiTabs-indicator': {
+              backgroundColor: '#1976d2',
+              height: 3
+            },
+            '& .MuiTab-root': styles.tab,
+            '& .Mui-selected': {
+              color: '#1976d2'
+            }
+          }}
+        >
+          <Tab label="Scanner QR" />
+          <Tab label="Recherche" />
+          <Tab label="Saisie manuelle" />
+        </Tabs>
 
       {activeTab === 0 && (
         <Box>
@@ -444,7 +524,8 @@ export default function SignatureCollection() {
             color="primary"
             fullWidth
             onClick={() => setShowScanner(true)}
-            sx={{ mb: 3 }}
+            sx={{ ...styles.button, mb: 3 }}
+            startIcon={<span role="img" aria-label="scanner">📷</span>}
           >
             Scanner un QR Code
           </Button>
@@ -489,166 +570,184 @@ export default function SignatureCollection() {
       )}
 
       {activeTab === 1 && (
-        <Box>
-          <BeneficiaireSearchTab 
+        <Box sx={styles.formContainer}>
+          <BeneficiaireSearchTab
             onBeneficiaireSelect={(beneficiaire) => {
-              // Convertir les données du bénéficiaire au format attendu par le formulaire
-              setManualFormData({
-                id: 0,
-                site_name: beneficiaire.site_de_distribution,
-                household_id: beneficiaire.household_id,
-                household_name: beneficiaire.nom_du_menage,
-                token_number: beneficiaire.token_number,
-                beneficiary_count: 1, // Valeur par défaut
-                first_name: beneficiaire.prenom,
-                middle_name: beneficiaire.deuxieme_nom || '',
-                last_name: beneficiaire.nom,
-                site_address: beneficiaire.adresse || '',
-                alternate_recipient: ''
-              });
+              setBeneficiaryInfo(beneficiaire);
+              setShowSignaturePad(true);
             }}
           />
-          
-          <Paper elevation={3} sx={{ p: 3 }}>
-            <form onSubmit={handleManualSubmit}>
-            <Grid container spacing={2}>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  required
-                  fullWidth
-                  label="Nom du site"
-                  name="site_name"
-                  value={manualFormData.site_name}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  required
-                  fullWidth
-                  label="ID du ménage"
-                  name="household_id"
-                  value={manualFormData.household_id}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  required
-                  fullWidth
-                  label="Numéro de jeton"
-                  name="token_number"
-                  value={manualFormData.token_number}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6}>
-                <TextField
-                  required
-                  fullWidth
-                  type="number"
-                  label="Nombre de bénéficiaires"
-                  name="beneficiary_count"
-                  value={manualFormData.beneficiary_count}
-                  onChange={handleManualChange}
-                  inputProps={{ min: 0 }}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  required
-                  fullWidth
-                  label="Prénom"
-                  name="first_name"
-                  value={manualFormData.first_name}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  fullWidth
-                  label="Deuxième nom"
-                  name="middle_name"
-                  value={manualFormData.middle_name}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-              <Grid item xs={12} sm={4}>
-                <TextField
-                  required
-                  fullWidth
-                  label="Nom"
-                  name="last_name"
-                  value={manualFormData.last_name}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Adresse du site"
-                  name="site_address"
-                  value={manualFormData.site_address}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-              <Grid item xs={12}>
-                <TextField
-                  fullWidth
-                  label="Bénéficiaire alternatif"
-                  name="alternate_recipient"
-                  value={manualFormData.alternate_recipient}
-                  onChange={handleManualChange}
-                />
-              </Grid>
-            </Grid>
+        </Box>
+      )}
 
-            <Box sx={{ mt: 3, display: 'flex', justifyContent: 'center', gap: 2 }}>
-              <Button
+      {activeTab === 2 && (
+        <Box component="form" onSubmit={handleManualSubmit} sx={styles.formContainer}>
+          <Grid container spacing={2}>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Nom du site"
+                name="site_name"
+                value={manualFormData.site_name}
+                onChange={handleManualChange}
+                required
+                sx={styles.formField}
                 variant="outlined"
-                onClick={() => setShowSignaturePad(true)}
-                disabled={loading}
-              >
-                {signature ? 'Modifier la signature' : 'Ajouter une signature'}
-              </Button>
-              <Button
-                type="submit"
-                variant="contained"
-                color="primary"
-                disabled={loading || !signature}
-              >
-                {loading ? <CircularProgress size={24} /> : 'Enregistrer'}
-              </Button>
-            </Box>
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="ID du ménage"
+                name="household_id"
+                value={manualFormData.household_id}
+                onChange={handleManualChange}
+                required
+                sx={styles.formField}
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Numéro de token"
+                name="token_number"
+                value={manualFormData.token_number}
+                onChange={handleManualChange}
+                required
+                sx={styles.formField}
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12} sm={6}>
+              <TextField
+                fullWidth
+                label="Nombre de bénéficiaires"
+                name="beneficiary_count"
+                type="number"
+                value={manualFormData.beneficiary_count}
+                onChange={handleManualChange}
+                required
+                InputProps={{ inputProps: { min: 1 } }}
+                sx={styles.formField}
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Prénom"
+                name="first_name"
+                value={manualFormData.first_name}
+                onChange={handleManualChange}
+                required
+                sx={styles.formField}
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Deuxième nom"
+                name="middle_name"
+                value={manualFormData.middle_name}
+                onChange={handleManualChange}
+              />
+            </Grid>
+            <Grid item xs={12} sm={4}>
+              <TextField
+                fullWidth
+                label="Nom"
+                name="last_name"
+                value={manualFormData.last_name}
+                onChange={handleManualChange}
+                required
+                sx={styles.formField}
+                variant="outlined"
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Adresse du site"
+                name="site_address"
+                value={manualFormData.site_address}
+                onChange={handleManualChange}
+              />
+            </Grid>
+            <Grid item xs={12}>
+              <TextField
+                fullWidth
+                label="Bénéficiaire alternatif"
+                name="alternate_recipient"
+                value={manualFormData.alternate_recipient}
+                onChange={handleManualChange}
+              />
+            </Grid>
+          </Grid>
 
-            {showSignaturePad && (
-              <Box sx={{ width: '100%', height: 300, border: '1px solid #ccc', mb: 2 }}>
-                <SignaturePad
-                  ref={(ref) => setSignaturePad(ref)}
-                  canvasProps={{
-                    width: 500,
-                    height: 200,
-                    className: 'signature-canvas'
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={() => setShowSignaturePad(true)}
+              disabled={!manualFormData.first_name || !manualFormData.last_name || !manualFormData.token_number}
+              sx={styles.button}
+              startIcon={<span role="img" aria-label="signature">✍️</span>}
+            >
+              Ajouter une signature
+            </Button>
+            <Button
+              type="submit"
+              variant="contained"
+              color="success"
+              disabled={loading || !signature}
+              sx={{
+                ...styles.button,
+                background: 'linear-gradient(45deg, #2e7d32, #4caf50)',
+                '&:hover': {
+                  background: 'linear-gradient(45deg, #1b5e20, #2e7d32)'
+                }
+              }}
+              startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <span role="img" aria-label="save">💾</span>}
+            >
+              {loading ? 'Traitement...' : 'Enregistrer'}
+            </Button>
+          </Box>
+
+          {showSignaturePad && (
+            <Box sx={{ width: '100%', height: 300, border: '1px solid #ccc', mb: 2 }}>
+              <SignaturePad
+                ref={(ref) => setSignaturePad(ref)}
+                canvasProps={{
+                  className: 'signature-canvas'
+                }}
+              />
+              <Box sx={{ mt: 2, display: 'flex', gap: 2, justifyContent: 'center' }}>
+                <Button 
+                  variant="outlined" 
+                  color="error" 
+                  onClick={() => {
+                    if (signaturePad) signaturePad.clear();
                   }}
-                />
-                <Box sx={{ mt: 2, display: 'flex', gap: 2, justifyContent: 'center' }}>
-                  <Button variant="outlined" onClick={handleClear}>
-                    Effacer
-                  </Button>
-                  <Button variant="contained" onClick={handleSave}>
-                    Sauvegarder
-                  </Button>
-                </Box>
+                  sx={styles.secondaryButton}
+                  startIcon={<span role="img" aria-label="clear">🗑️</span>}
+                >
+                  Effacer
+                </Button>
+                <Button 
+                  variant="contained" 
+                  color="primary" 
+                  onClick={handleSave}
+                  disabled={loading}
+                  sx={styles.button}
+                  startIcon={loading ? <CircularProgress size={20} color="inherit" /> : <span role="img" aria-label="save">💾</span>}
+                >
+                  {loading ? 'Traitement...' : 'Enregistrer'}
+                </Button>
               </Box>
-            )}
-
-            {signature && (
-              <Box sx={{ mt: 2, display: 'flex', justifyContent: 'center' }}>
-                <img src={signature} alt="Signature" style={{ maxWidth: 300, border: '1px solid #ccc' }} />
-              </Box>
-            )}
-          </form>
-        </Paper>
+            </Box>
+          )}
         </Box>
       )}
 
@@ -813,48 +912,80 @@ export default function SignatureCollection() {
         </DialogActions>
       </Dialog>
 
+      </Paper>
       {/* Signature Dialog */}
       <Dialog 
         open={showSignaturePad} 
         onClose={() => setShowSignaturePad(false)}
-        maxWidth="sm"
-        fullWidth
+        maxWidth="md"
+        PaperProps={{
+          sx: {
+            borderRadius: '12px',
+            boxShadow: '0 10px 25px rgba(0,0,0,0.2)',
+            overflow: 'hidden'
+          }
+        }}
       >
-        <DialogTitle>Signature</DialogTitle>
-        <DialogContent>
-          <Box sx={{ border: '1px solid #ccc', mt: 2 }}>
+        <DialogTitle sx={{ 
+          bgcolor: '#f0f7ff', 
+          borderBottom: '1px solid #e2e8f0',
+          fontWeight: 600,
+          color: '#1a365d'
+        }}>
+          Collecte de signatures
+        </DialogTitle>
+        <DialogContent sx={{ p: 3, mt: 2 }}>
+          <Typography variant="subtitle1" gutterBottom sx={{ mb: 2, color: '#475569' }}>
+            Veuillez signer dans le cadre ci-dessous pour confirmer la distribution avec des techniques numériques pour garantir la conformité.
+          </Typography>
+          <Box 
+            sx={{ 
+              border: '2px solid #e2e8f0', 
+              borderRadius: '8px', 
+              backgroundColor: '#ffffff',
+              mb: 2
+            }}
+          >
             <SignaturePad
               ref={(ref) => setSignaturePad(ref)}
-              canvasProps={{
-                width: 500,
-                height: 200,
-                style: { width: '100%', height: '200px' }
+              canvasProps={{ 
+                className: 'signature-canvas',
+                style: { 
+                  width: '100%', 
+                  height: '200px',
+                  borderRadius: '6px'
+                }
               }}
             />
           </Box>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 2 }}>
+            <Button 
+              variant="outlined" 
+              color="error" 
+              onClick={() => {
+                if (signaturePad) signaturePad.clear();
+              }}
+              sx={styles.secondaryButton}
+              startIcon={<span role="img" aria-label="clear">🗑️</span>}
+            >
+              Effacer
+            </Button>
+            <Button 
+              variant="contained" 
+              color="primary" 
+              onClick={() => {
+                if (signaturePad) {
+                  setSignature(signaturePad.toDataURL());
+                  setShowSignaturePad(false);
+                }
+              }}
+              sx={styles.button}
+              startIcon={<span role="img" aria-label="save">💾</span>}
+            >
+              Sauvegarder
+            </Button>
+          </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={() => {
-            if (signaturePad) signaturePad.clear();
-          }}>
-            Effacer
-          </Button>
-          <Button onClick={() => setShowSignaturePad(false)}>
-            Annuler
-          </Button>
-          <Button 
-            onClick={() => {
-              if (signaturePad) {
-                setSignature(signaturePad.toDataURL());
-                setShowSignaturePad(false);
-              }
-            }}
-            variant="contained" 
-            color="primary"
-          >
-            Valider
-          </Button>
-        </DialogActions>
       </Dialog>
     </Box>
   );

@@ -207,14 +207,49 @@ export default function WaybillReport() {
 
   return (
     <PageTransition>
-      <Box sx={{ p: 3 }}>
-        <Typography variant="h4" gutterBottom>
-          Rapports Unifiés
+      <Box sx={{ p: 3, maxWidth: '1400px', mx: 'auto' }}>
+        <Typography 
+          variant="h4" 
+          className="section-header"
+          sx={{ 
+            mb: 3,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between'
+          }}
+        >
+          <span>Rapports Unifiés</span>
+          {waybillData.length > 0 && (
+            <Button
+              variant="outlined"
+              color="primary"
+              size="small"
+              onClick={exportToExcel}
+              disabled={loading}
+              sx={{ 
+                borderRadius: '8px',
+                textTransform: 'none',
+                fontWeight: 600,
+                boxShadow: '0 2px 4px rgba(0,0,0,0.05)',
+              }}
+            >
+              Exporter en Excel
+            </Button>
+          )}
         </Typography>
 
-        <Paper sx={{ p: 3, mb: 3 }}>
-          <Typography variant="h6" gutterBottom>
-            Filtres
+        <Paper 
+          elevation={2}
+          className="content-card" 
+          sx={{ 
+            p: 3, 
+            mb: 4,
+            borderRadius: '12px',
+            overflow: 'hidden'
+          }}
+        >
+          <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#003C5F' }}>
+            Filtres du rapport
           </Typography>
           
           <Grid container spacing={3}>
@@ -275,46 +310,68 @@ export default function WaybillReport() {
             </Grid>
           </Grid>
           
-          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'space-between' }}>
+          <Box sx={{ mt: 3, display: 'flex', justifyContent: 'flex-start' }}>
             <Button
               variant="contained"
               color="primary"
               onClick={generateReport}
               disabled={loading}
+              className="action-button"
+              sx={{ 
+                height: '50px',
+                fontSize: '1rem',
+                px: 4,
+                background: 'linear-gradient(45deg, #0078BE 30%, #0091E6 90%)',
+              }}
             >
-              {loading ? <CircularProgress size={24} /> : 'Générer le rapport'}
-            </Button>
-            
-            <Button
-              variant="outlined"
-              color="primary"
-              onClick={exportToExcel}
-              disabled={loading || waybillData.length === 0}
-            >
-              Exporter en Excel
+              {loading ? <CircularProgress size={24} color="inherit" /> : 'Générer le rapport'}
             </Button>
           </Box>
         </Paper>
 
         {error && (
-          <Alert severity="error" sx={{ mb: 3 }}>
+          <Alert 
+            severity="error" 
+            sx={{ 
+              mb: 3, 
+              borderRadius: '8px',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              '& .MuiAlert-icon': {
+                color: '#D32F2F',
+              }
+            }}
+            variant="filled"
+          >
             {error}
           </Alert>
         )}
 
         {waybillData.length > 0 ? (
-          <Paper sx={{ width: '100%', overflow: 'hidden' }}>
+          <>
+            <Box sx={{ mb: 3 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2, color: '#003C5F' }}>
+                Résultats du rapport
+              </Typography>
+            </Box>
+            <Paper 
+              sx={{ 
+                width: '100%', 
+                overflow: 'hidden',
+                borderRadius: '12px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+              }}
+            >
             <TableContainer>
               <Table>
                 <TableHead>
-                  <TableRow>
-                    <TableCell>Date</TableCell>
-                    <TableCell>Site</TableCell>
-                    <TableCell>Waybill #</TableCell>
-                    <TableCell>Batch #</TableCell>
-                    <TableCell>Commodity</TableCell>
-                    <TableCell align="right">Quantité</TableCell>
-                    <TableCell align="right">Tonnage</TableCell>
+                  <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+                    <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Date</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Site</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Waybill #</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Batch #</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Commodity</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Quantité</TableCell>
+                    <TableCell align="right" sx={{ fontWeight: 700, color: '#1e293b' }}>Tonnage</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -333,9 +390,19 @@ export default function WaybillReport() {
               </Table>
             </TableContainer>
             
-            <Box sx={{ display: 'flex', justifyContent: 'space-between', p: 2 }}>
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                p: 2,
+                borderTop: '1px solid #e2e8f0',
+                backgroundColor: '#f8fafc'
+              }}
+            >
               <Box sx={{ display: 'flex', alignItems: 'center' }}>
-                Lignes par page: 
+                <Typography variant="body2" sx={{ color: '#64748b', mr: 2 }}>
+                  Lignes par page:
+                </Typography>
                 <Select
                   value={rowsPerPage.toString()}
                   onChange={(e) => {
@@ -344,13 +411,27 @@ export default function WaybillReport() {
                     generateReport();
                   }}
                   size="small"
-                  sx={{ ml: 1, mr: 2 }}
+                  sx={{ 
+                    mx: 1,
+                    '.MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#cbd5e1',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#94a3b8',
+                    },
+                    '.MuiSelect-select': {
+                      py: 0.5,
+                      px: 1.5,
+                    }
+                  }}
                 >
                   <MenuItem value={10}>10</MenuItem>
                   <MenuItem value={25}>25</MenuItem>
                   <MenuItem value={50}>50</MenuItem>
                 </Select>
-                {page}-{Math.min(page * rowsPerPage, waybillData.length)} sur {waybillData.length}
+                <Typography variant="body2" sx={{ color: '#64748b', ml: 2 }}>
+                  {page}-{Math.min(page * rowsPerPage, waybillData.length)} sur {waybillData.length}
+                </Typography>
               </Box>
               
               <Pagination
@@ -358,23 +439,61 @@ export default function WaybillReport() {
                 page={page}
                 onChange={handlePageChange}
                 color="primary"
+                size="medium"
+                sx={{
+                  '.MuiPaginationItem-root': {
+                    borderRadius: '8px',
+                    fontWeight: 500,
+                  },
+                  '.Mui-selected': {
+                    backgroundColor: 'rgba(0, 120, 190, 0.1) !important',
+                    color: '#0078BE',
+                  }
+                }}
               />
             </Box>
           </Paper>
+          </>
         ) : !loading && (
-          <Paper sx={{ p: 3, textAlign: 'center' }}>
+          <Alert 
+            severity="info" 
+            variant="outlined"
+            sx={{ 
+              borderRadius: '8px',
+              p: 2,
+              backgroundColor: 'rgba(2, 132, 199, 0.08)',
+              border: '1px solid rgba(2, 132, 199, 0.2)',
+              display: 'flex',
+              alignItems: 'center',
+              '& .MuiAlert-icon': {
+                color: '#0284c7',
+                fontSize: '1.5rem',
+                mr: 2
+              }
+            }}
+          >
             <Typography variant="body1">
               Aucune donnée disponible. Veuillez générer un rapport.
             </Typography>
-          </Paper>
+          </Alert>
         )}
 
         <Snackbar
           open={snackbar.open}
           autoHideDuration={6000}
           onClose={handleCloseSnackbar}
+          anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
         >
-          <Alert onClose={handleCloseSnackbar} severity={snackbar.severity}>
+          <Alert 
+            onClose={handleCloseSnackbar} 
+            severity={snackbar.severity}
+            variant="filled"
+            sx={{ 
+              width: '100%',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              borderRadius: '8px',
+            }}
+          >
             {snackbar.message}
           </Alert>
         </Snackbar>
