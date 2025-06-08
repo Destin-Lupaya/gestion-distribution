@@ -34,6 +34,118 @@ import toast from 'react-hot-toast';
 import dayjs from 'dayjs';
 import { DataGrid, GridColDef, GridToolbar } from '@mui/x-data-grid';
 
+// Styles centralisés pour une cohérence visuelle
+const styles = {
+  container: { 
+    maxWidth: '1400px', 
+    margin: '0 auto', 
+    padding: '24px'
+  },
+  header: { 
+    marginBottom: '24px', 
+    borderBottom: '1px solid #e0e0e0', 
+    paddingBottom: '16px' 
+  },
+  title: { 
+    fontWeight: 700, 
+    color: '#1a365d', 
+    fontSize: '1.75rem', 
+    marginBottom: '8px' 
+  },
+  subtitle: { 
+    color: '#4a5568', 
+    marginTop: '8px', 
+    fontSize: '1rem' 
+  },
+  paper: { 
+    borderRadius: '12px', 
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)', 
+    marginBottom: '24px', 
+    padding: '24px'
+  },
+  searchBar: { 
+    '& .MuiOutlinedInput-root': { 
+      borderRadius: '8px', 
+      '& fieldset': { 
+        borderColor: '#e2e8f0' 
+      }, 
+      '&:hover fieldset': { 
+        borderColor: '#94a3b8' 
+      }, 
+      '&.Mui-focused fieldset': { 
+        borderColor: '#0078BE' 
+      } 
+    } 
+  },
+  button: { 
+    textTransform: 'none', 
+    fontWeight: 600, 
+    borderRadius: '8px', 
+    padding: '8px 16px'
+  },
+  primaryButton: { 
+    background: 'linear-gradient(45deg, #0078BE 30%, #00a0e9 90%)', 
+    color: 'white', 
+    '&:hover': { 
+      background: 'linear-gradient(45deg, #006ba7 30%, #0091d4 90%)' 
+    } 
+  },
+  secondaryButton: { 
+    background: '#ffffff', 
+    border: '1.5px solid #e2e8f0', 
+    color: '#4a5568', 
+    '&:hover': { 
+      background: '#f8fafc'
+    } 
+  },
+  card: { 
+    borderRadius: '12px', 
+    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)', 
+    border: '1px solid #e2e8f0'
+  },
+  tableHeader: { 
+    backgroundColor: '#f8fafc', 
+    '& .MuiTableCell-head': { 
+      fontWeight: 600, 
+      color: '#334155' 
+    } 
+  },
+  tableRow: { 
+    '&:nth-of-type(odd)': { 
+      backgroundColor: '#fafafa' 
+    }, 
+    '&:hover': { 
+      backgroundColor: '#f1f5f9' 
+    } 
+  },
+  tabs: { 
+    '& .MuiTab-root': { 
+      textTransform: 'none', 
+      fontWeight: 600, 
+      fontSize: '0.95rem'
+    }, 
+    '& .Mui-selected': { 
+      color: '#0078BE' 
+    }, 
+    '& .MuiTabs-indicator': { 
+      backgroundColor: '#0078BE' 
+    } 
+  },
+  dataGrid: { 
+    border: 'none', 
+    '& .MuiDataGrid-columnHeaders': { 
+      backgroundColor: '#f8fafc', 
+      borderBottom: '1px solid #e2e8f0' 
+    }, 
+    '& .MuiDataGrid-cell': { 
+      borderBottom: '1px solid #f1f5f9' 
+    }, 
+    '& .MuiDataGrid-row:hover': { 
+      backgroundColor: '#f1f5f9' 
+    } 
+  }
+};
+
 function NutritionDistribution() {
   const [beneficiaire, setBeneficiaire] = useState<any>(null);
   const [searchId, setSearchId] = useState('');
@@ -117,7 +229,10 @@ function NutritionDistribution() {
       // Première tentative: ID tel quel
       try {
         console.log(`Tentative 1: Recherche avec ID: '${cleanSearchId}'`);
-        const response = await apiService.get(`/api/nutrition/beneficiaires/${encodeURIComponent(cleanSearchId)}`);
+        // Assurer que l'URL est correctement formée
+        const endpoint = `/api/nutrition/beneficiaires/${encodeURIComponent(cleanSearchId)}`;
+        console.log(`Appel API: ${endpoint}`);
+        const response = await apiService.get(endpoint);
         
         if (response.data) {
           console.log('Bénéficiaire trouvé avec le format exact');
@@ -144,7 +259,10 @@ function NutritionDistribution() {
             console.log(`Tentative 2: Essai avec préfixe: '${alternativeId}'`);
           }
           
-          const response = await apiService.get(`/api/nutrition/beneficiaires/${encodeURIComponent(alternativeId)}`);
+          // Assurer que l'URL est correctement formée
+          const endpoint = `/api/nutrition/beneficiaires/${encodeURIComponent(alternativeId)}`;
+          console.log(`Appel API: ${endpoint}`);
+          const response = await apiService.get(endpoint);
           
           if (response.data) {
             console.log('Bénéficiaire trouvé avec le format alternatif');
@@ -166,7 +284,10 @@ function NutritionDistribution() {
           if (numericPart && numericPart !== cleanSearchId) {
             console.log(`Tentative 3: Essai avec uniquement la partie numérique: '${numericPart}'`);
             
-            const response = await apiService.get(`/api/nutrition/beneficiaires/${encodeURIComponent(numericPart)}`);
+            // Assurer que l'URL est correctement formée
+            const endpoint = `/api/nutrition/beneficiaires/${encodeURIComponent(numericPart)}`;
+            console.log(`Appel API: ${endpoint}`);
+            const response = await apiService.get(endpoint);
             
             if (response.data) {
               console.log('Bénéficiaire trouvé avec la partie numérique');
@@ -182,11 +303,11 @@ function NutritionDistribution() {
       
       // Si toutes les tentatives échouent
       if (!foundBeneficiary) {
-        setError('Bénéficiaire non trouvé. Vérifiez le numéro d\'enregistrement.');
+        setError(`Bénéficiaire non trouvé avec l'identifiant "${searchId}". Veuillez vérifier que le numéro d'enregistrement est correct et essayez à nouveau. Nous avons essayé plusieurs formats (avec/sans préfixe R-, partie numérique seule) mais aucun résultat n'a été trouvé. Si le problème persiste, contactez l'administrateur système.`);
       }
     } catch (err: any) {
       console.error('Error searching beneficiary:', err);
-      setError(err.message);
+      setError(`Erreur lors de la recherche: ${err.message || 'Erreur inconnue'}. Veuillez réessayer ou contacter le support technique.`);
       toast.error('Erreur lors de la recherche');
     } finally {
       setLoading(false);
@@ -748,17 +869,23 @@ function NutritionDistribution() {
 
   return (
     <PageTransition>
-      <div className="space-y-6">
-        <Paper elevation={0} sx={{ p: 4, borderRadius: 2 }}>
-          <Typography variant="h5" component="h1" gutterBottom fontWeight={600}>
-            Distribution Nutrition
-          </Typography>
+      <Box sx={styles.container}>
+        <Paper elevation={0} sx={styles.paper}>
+          <Box sx={styles.header}>
+            <Typography variant="h5" component="h1" sx={styles.title}>
+              Distribution Nutrition
+            </Typography>
+            <Typography variant="body1" sx={styles.subtitle}>
+              Gestion des distributions de rations alimentaires
+            </Typography>
+          </Box>
 
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 3 }}>
             <Tabs 
               value={activeTab} 
               onChange={handleTabChange}
               aria-label="nutrition tabs"
+              sx={styles.tabs}
             >
               <Tab label="Enregistrement Distribution" />
               <Tab label="Rapport Global" />
@@ -776,6 +903,7 @@ function NutritionDistribution() {
                       value={searchId}
                       onChange={(e) => setSearchId(e.target.value)}
                       placeholder="Entrez le numéro d'enregistrement"
+                      sx={styles.searchBar}
                     />
                   </Grid>
                   <Grid item xs={12} sm={6} md={2}>
@@ -785,7 +913,7 @@ function NutritionDistribution() {
                       onClick={handleSearch}
                       disabled={loading}
                       startIcon={<SearchIcon />}
-                      sx={{ height: 56 }}
+                      sx={{ ...styles.button, ...styles.primaryButton, height: 56 }}
                     >
                       Rechercher
                     </Button>
@@ -798,7 +926,7 @@ function NutritionDistribution() {
                         color="secondary"
                         onClick={handlePrintRationCard}
                         startIcon={<PrintIcon />}
-                        sx={{ height: 56 }}
+                        sx={{ ...styles.button, ...styles.secondaryButton, height: 56 }}
                       >
                         Réimprimer Carte
                       </Button>
@@ -808,7 +936,26 @@ function NutritionDistribution() {
               </Box>
 
               {error && (
-                <Alert severity="error" sx={{ mb: 3 }}>
+                <Alert 
+                  severity="error" 
+                  variant="filled"
+                  sx={{ 
+                    mb: 3, 
+                    borderRadius: '8px',
+                    '& .MuiAlert-icon': { fontSize: '1.2rem' },
+                    '& .MuiAlert-message': { fontSize: '0.95rem', fontWeight: 500 }
+                  }}
+                  action={
+                    <Button 
+                      color="inherit" 
+                      size="small" 
+                      onClick={() => setError(null)}
+                      sx={{ fontWeight: 600 }}
+                    >
+                      Fermer
+                    </Button>
+                  }
+                >
                   {error}
                 </Alert>
               )}
@@ -819,9 +966,9 @@ function NutritionDistribution() {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ duration: 0.3 }}
                 >
-                  <Card variant="outlined" sx={{ mb: 4 }}>
+                  <Card variant="outlined" sx={{ ...styles.card, mb: 4 }}>
                     <CardContent>
-                      <Typography variant="h6" gutterBottom>
+                      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#1a365d' }}>
                         Informations du bénéficiaire
                       </Typography>
                       <Grid container spacing={2}>
@@ -878,7 +1025,7 @@ function NutritionDistribution() {
                   </Card>
 
                   <Box component="form" onSubmit={handleSubmit} sx={{ mb: 4 }}>
-                    <Typography variant="h6" gutterBottom>
+                    <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#1a365d' }}>
                       Nouvelle distribution
                     </Typography>
                     <Grid container spacing={3}>
@@ -939,6 +1086,7 @@ function NutritionDistribution() {
                         variant="contained"
                         disabled={loading}
                         startIcon={<SaveIcon />}
+                        sx={{ ...styles.button, ...styles.primaryButton }}
                       >
                         {loading ? 'Enregistrement...' : 'Enregistrer'}
                       </Button>
@@ -947,13 +1095,13 @@ function NutritionDistribution() {
 
                   {distributions.length > 0 && (
                     <Box>
-                      <Typography variant="h6" gutterBottom>
+                      <Typography variant="h6" gutterBottom sx={{ fontWeight: 600, color: '#1a365d' }}>
                         Historique des distributions
                       </Typography>
-                      <TableContainer component={Paper} variant="outlined">
+                      <TableContainer component={Paper} variant="outlined" sx={{ borderRadius: '8px', overflow: 'hidden' }}>
                         <Table size="small">
                           <TableHead>
-                            <TableRow>
+                            <TableRow sx={styles.tableHeader}>
                               <TableCell>Date</TableCell>
                               <TableCell>Cycle</TableCell>
                               <TableCell>Quantité</TableCell>
@@ -963,7 +1111,7 @@ function NutritionDistribution() {
                           </TableHead>
                           <TableBody>
                             {distributions.map((dist) => (
-                              <TableRow key={dist.id}>
+                              <TableRow key={dist.id} sx={styles.tableRow}>
                                 <TableCell>{new Date(dist.date_distribution).toLocaleDateString()}</TableCell>
                                 <TableCell>{dist.cycle}</TableCell>
                                 <TableCell>{dist.quantite}</TableCell>
@@ -982,7 +1130,7 @@ function NutritionDistribution() {
           ) : (
             <Box>
               <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <Typography variant="h6">
+                <Typography variant="h6" sx={{ fontWeight: 600, color: '#1a365d' }}>
                   Rapport des Bénéficiaires Nutrition
                 </Typography>
                 <Button
@@ -990,13 +1138,15 @@ function NutritionDistribution() {
                   startIcon={<DownloadIcon />}
                   onClick={exportToCSV}
                   disabled={reportData.length === 0}
+                  sx={{ ...styles.button, ...styles.secondaryButton }}
                 >
                   Exporter en CSV
                 </Button>
               </Box>
               
-              <Paper sx={{ height: 600, width: '100%' }}>
+              <Paper sx={{ height: 600, width: '100%', borderRadius: '12px', overflow: 'hidden' }}>
                 <DataGrid
+                  sx={styles.dataGrid}
                   rows={reportData}
                   columns={columns}
                   loading={loadingReport}
@@ -1019,7 +1169,7 @@ function NutritionDistribution() {
             </Box>
           )}
         </Paper>
-      </div>
+      </Box>
     </PageTransition>
   );
 }

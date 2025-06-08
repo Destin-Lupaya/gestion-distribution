@@ -65,6 +65,16 @@ interface WaybillItem {
   status?: string;
 }
 
+interface WaybillTotals {
+  quantity_sent: number;
+  tonne_sent: number;
+  quantity: number;
+  tonne_received: number;
+  loss: number;
+  mount_in: number;
+  return_qty: number;
+}
+
 // Valeurs initiales pour un nouvel élément
 const initialWaybillItem: WaybillItem = {
   waybill_number: '',
@@ -98,6 +108,94 @@ const unitOptions = ['kg', 'g', 'l', 'ml', 'pcs'];
 const typeOptions = ['Food', 'Non-Food'];
 
 const ReceptionWaybill: React.FC = () => {
+  // Styles personnalisés pour le composant
+  const styles = {
+    container: {
+      maxWidth: '1400px',
+      margin: '0 auto',
+      padding: '24px',
+      borderRadius: '12px',
+      boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+      backgroundColor: '#ffffff'
+    },
+    header: {
+      marginBottom: '24px',
+      borderBottom: '1px solid #e0e0e0',
+      paddingBottom: '16px'
+    },
+    title: {
+      fontWeight: 700,
+      color: '#1a365d',
+      fontSize: '1.75rem',
+      marginBottom: '8px'
+    },
+    subtitle: {
+      color: '#4a5568',
+      marginTop: '8px',
+      fontSize: '1rem'
+    },
+    paper: {
+      borderRadius: '12px',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)',
+      marginBottom: '24px',
+      overflow: 'hidden'
+    },
+    searchBar: {
+      '& .MuiOutlinedInput-root': {
+        borderRadius: '8px',
+        '& fieldset': {
+          borderColor: '#e2e8f0',
+          borderWidth: '1.5px'
+        },
+        '&:hover fieldset': {
+          borderColor: '#94a3b8',
+        },
+        '&.Mui-focused fieldset': {
+          borderColor: '#0078BE',
+        }
+      }
+    },
+    button: {
+      textTransform: 'none',
+      fontWeight: 600,
+      borderRadius: '8px',
+      padding: '8px 16px',
+      boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+    },
+    primaryButton: {
+      background: 'linear-gradient(45deg, #1976d2, #2196f3)',
+      '&:hover': {
+        background: 'linear-gradient(45deg, #1565c0, #1976d2)'
+      }
+    },
+    tableHeader: {
+      fontWeight: 700,
+      color: '#1e293b',
+      backgroundColor: '#f8fafc'
+    },
+    tableRow: {
+      '&:nth-of-type(odd)': {
+        backgroundColor: '#fafafa',
+      },
+      '&:hover': {
+        backgroundColor: '#f0f7ff',
+      }
+    },
+    formField: {
+      marginBottom: '16px'
+    },
+    dialogTitle: {
+      backgroundColor: '#f0f7ff',
+      borderBottom: '1px solid #e2e8f0',
+      padding: '16px 24px'
+    },
+    errorMessage: {
+      color: '#e53e3e',
+      marginTop: '8px',
+      fontSize: '0.875rem'
+    }
+  };
+
   const [waybillItems, setWaybillItems] = useState<WaybillItem[]>([]);
   const [currentItem, setCurrentItem] = useState<WaybillItem>(initialWaybillItem);
   const [openDialog, setOpenDialog] = useState(false);
@@ -119,31 +217,108 @@ const ReceptionWaybill: React.FC = () => {
   const fetchWaybillItems = async () => {
     setLoading(true);
     try {
-      // Utiliser la route correcte pour les waybills
-      const response = await apiService.get('/api/waybills/report', {
-        startDate: new Date().toISOString().split('T')[0], // Date du jour
-        endDate: new Date().toISOString().split('T')[0],   // Date du jour
-        limit: '100' // Récupérer jusqu'à 100 éléments
-      });
+      console.log('Tentative de récupération des données waybill avec la première URL...');
+      // Première tentative avec l'URL principale
+      const response = await apiService.get('/api/waybill_items');
       
-      // Vérifier si la réponse est valide et contient des données
-      if (response && response.data) {
-        // S'assurer que response.data est un tableau
-        setWaybillItems(Array.isArray(response.data) ? response.data : []);
-      } else {
-        // Si la réponse n'a pas le format attendu
-        console.error('Format de réponse invalide:', response);
-        setWaybillItems([]);
+      // Vérifier si la réponse contient directement un tableau ou une propriété data
+      let dataArray = Array.isArray(response) ? response : 
+                     (response.data ? response.data : []);
+      
+      console.log('Données waybill reçues brutes:', dataArray);
+      
+      // Normaliser les données pour s'assurer que tous les champs numériques sont bien des nombres
+      dataArray = dataArray.map((item: any) => ({
+        ...item,
+        id: item.id ? (typeof item.id === 'number' ? item.id : Number(item.id)) : undefined,
+        quantity_sent: typeof item.quantity_sent === 'number' ? item.quantity_sent : Number(item.quantity_sent) || 0,
+        tonne_sent: typeof item.tonne_sent === 'number' ? item.tonne_sent : Number(item.tonne_sent) || 0,
+        quantity: typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 0,
+        tonne_received: typeof item.tonne_received === 'number' ? item.tonne_received : Number(item.tonne_received) || 0,
+        loss: typeof item.loss === 'number' ? item.loss : Number(item.loss) || 0,
+        mount_in: typeof item.mount_in === 'number' ? item.mount_in : Number(item.mount_in) || 0,
+        return_qty: typeof item.return_qty === 'number' ? item.return_qty : Number(item.return_qty) || 0
+      }));
+      
+      console.log('Données waybill normalisées:', dataArray);
+      setWaybillItems(dataArray);
+      
+      if (dataArray.length === 0) {
+        console.warn('Aucune donnée waybill n\'a été trouvée avec la première URL');
       }
     } catch (error) {
-      console.error('Erreur lors du chargement des données du waybill:', error);
-      setSnackbar({
-        open: true,
-        message: 'Impossible de charger les données du waybill',
-        severity: 'error'
-      });
-      // Réinitialiser à un tableau vide en cas d'erreur
-      setWaybillItems([]);
+      console.error('Erreur lors du chargement des données waybill avec la première URL:', error);
+      
+      // Essayer avec l'URL alternative si la première tentative échoue
+      try {
+        console.log('Tentative avec URL alternative...');
+        const altResponse = await apiService.get('/api/waybill-items');
+        
+        let dataArray = Array.isArray(altResponse) ? altResponse : 
+                       (altResponse.data ? altResponse.data : []);
+        
+        console.log('Données waybill reçues avec URL alternative brutes:', dataArray);
+        
+        // Normaliser les données
+        dataArray = dataArray.map((item: any) => ({
+          ...item,
+          id: item.id ? (typeof item.id === 'number' ? item.id : Number(item.id)) : undefined,
+          quantity_sent: typeof item.quantity_sent === 'number' ? item.quantity_sent : Number(item.quantity_sent) || 0,
+          tonne_sent: typeof item.tonne_sent === 'number' ? item.tonne_sent : Number(item.tonne_sent) || 0,
+          quantity: typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 0,
+          tonne_received: typeof item.tonne_received === 'number' ? item.tonne_received : Number(item.tonne_received) || 0,
+          loss: typeof item.loss === 'number' ? item.loss : Number(item.loss) || 0,
+          mount_in: typeof item.mount_in === 'number' ? item.mount_in : Number(item.mount_in) || 0,
+          return_qty: typeof item.return_qty === 'number' ? item.return_qty : Number(item.return_qty) || 0
+        }));
+        
+        console.log('Données waybill reçues (URL alternative) normalisées:', dataArray);
+        setWaybillItems(dataArray);
+        
+        if (dataArray.length === 0) {
+          console.warn('Aucune donnée waybill n\'a été trouvée avec l\'URL alternative');
+          
+          // Essayer une troisième URL si les deux premières échouent
+          try {
+            console.log('Tentative avec troisième URL...');
+            const thirdResponse = await apiService.get('/api/waybills/report', {
+              startDate: new Date().toISOString().split('T')[0], // Date du jour
+              endDate: new Date().toISOString().split('T')[0],   // Date du jour
+              limit: '100' // Récupérer jusqu'à 100 éléments
+            });
+            
+            let thirdDataArray = Array.isArray(thirdResponse) ? thirdResponse : 
+                              (thirdResponse.data ? thirdResponse.data : []);
+            
+            console.log('Données waybill reçues avec troisième URL brutes:', thirdDataArray);
+            
+            // Normaliser les données
+            thirdDataArray = thirdDataArray.map((item: any) => ({
+              ...item,
+              id: item.id ? (typeof item.id === 'number' ? item.id : Number(item.id)) : undefined,
+              quantity_sent: typeof item.quantity_sent === 'number' ? item.quantity_sent : Number(item.quantity_sent) || 0,
+              tonne_sent: typeof item.tonne_sent === 'number' ? item.tonne_sent : Number(item.tonne_sent) || 0,
+              quantity: typeof item.quantity === 'number' ? item.quantity : Number(item.quantity) || 0,
+              tonne_received: typeof item.tonne_received === 'number' ? item.tonne_received : Number(item.tonne_received) || 0,
+              loss: typeof item.loss === 'number' ? item.loss : Number(item.loss) || 0,
+              mount_in: typeof item.mount_in === 'number' ? item.mount_in : Number(item.mount_in) || 0,
+              return_qty: typeof item.return_qty === 'number' ? item.return_qty : Number(item.return_qty) || 0
+            }));
+            
+            console.log('Données waybill reçues (troisième URL) normalisées:', thirdDataArray);
+            setWaybillItems(thirdDataArray);
+          } catch (thirdError) {
+            console.error('Erreur lors de la troisième tentative:', thirdError);
+          }
+        }
+      } catch (secondError) {
+        console.error('Erreur lors de la seconde tentative:', secondError);
+        setSnackbar({
+          open: true,
+          message: 'Impossible de charger les données waybill. Vérifiez la connexion au serveur.',
+          severity: 'error'
+        });
+      }
     } finally {
       setLoading(false);
     }
@@ -181,24 +356,69 @@ const ReceptionWaybill: React.FC = () => {
   const handleDelete = async (id?: number | string | undefined) => {
     if (!id) return;
     
+    setLoading(true);
     try {
-      await apiService.delete(`/api/waybill-items/${id}`);
+      console.log(`Tentative de suppression avec première URL: /api/waybill_items/${id}`);
+      // Première tentative avec underscore
+      await apiService.delete(`/api/waybill_items/${id}`);
+      
       // S'assurer que waybillItems est un tableau avant de le filtrer
       if (Array.isArray(waybillItems)) {
         setWaybillItems(waybillItems.filter(item => item.id !== id));
       }
+      
       setSnackbar({
         open: true,
         message: 'Élément supprimé avec succès',
         severity: 'success'
       });
     } catch (error) {
-      console.error('Erreur lors de la suppression:', error);
-      setSnackbar({
-        open: true,
-        message: 'Erreur lors de la suppression de l\'élément',
-        severity: 'error'
-      });
+      console.error('Erreur lors de la première tentative de suppression:', error);
+      
+      // Essayer avec l'URL alternative si la première tentative échoue
+      try {
+        console.log(`Tentative de suppression avec URL alternative: /api/waybill-items/${id}`);
+        await apiService.delete(`/api/waybill-items/${id}`);
+        
+        // S'assurer que waybillItems est un tableau avant de le filtrer
+        if (Array.isArray(waybillItems)) {
+          setWaybillItems(waybillItems.filter(item => item.id !== id));
+        }
+        
+        setSnackbar({
+          open: true,
+          message: 'Élément supprimé avec succès',
+          severity: 'success'
+        });
+      } catch (secondError) {
+        console.error('Erreur lors de la seconde tentative de suppression:', secondError);
+        
+        // Essayer une troisième URL si nécessaire
+        try {
+          console.log(`Tentative de suppression avec troisième URL: /api/waybills/${id}`);
+          await apiService.delete(`/api/waybills/${id}`);
+          
+          // S'assurer que waybillItems est un tableau avant de le filtrer
+          if (Array.isArray(waybillItems)) {
+            setWaybillItems(waybillItems.filter(item => item.id !== id));
+          }
+          
+          setSnackbar({
+            open: true,
+            message: 'Élément supprimé avec succès',
+            severity: 'success'
+          });
+        } catch (thirdError) {
+          console.error('Erreur lors de la troisième tentative de suppression:', thirdError);
+          setSnackbar({
+            open: true,
+            message: 'Erreur lors de la suppression de l\'élément. Vérifiez la connexion au serveur.',
+            severity: 'error'
+          });
+        }
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -320,36 +540,163 @@ const ReceptionWaybill: React.FC = () => {
 
   // Soumettre le formulaire
   const handleSubmit = async () => {
+    // Validation des champs obligatoires
+    if (!currentItem.waybill_number) {
+      setSnackbar({
+        open: true,
+        message: 'Le numéro de waybill est obligatoire',
+        severity: 'error'
+      });
+      return;
+    }
+
+    if (!currentItem.batchnumber && !currentItem.batch_number) {
+      setSnackbar({
+        open: true,
+        message: 'Le numéro de batch est obligatoire',
+        severity: 'error'
+      });
+      return;
+    }
+
+    setLoading(true);
     try {
       if (isEditing && currentItem.id) {
-        await apiService.put(`/api/waybill-items/${currentItem.id}`, currentItem);
-        // S'assurer que waybillItems est un tableau avant d'utiliser map
-        if (Array.isArray(waybillItems)) {
-          setWaybillItems(waybillItems.map(item => item.id === currentItem.id ? currentItem : item));
+        // Mise à jour d'un élément existant
+        console.log(`Tentative de mise à jour avec première URL: /api/waybill_items/${currentItem.id}`);
+        try {
+          // Première tentative avec underscore
+          await apiService.put(`/api/waybill_items/${currentItem.id}`, currentItem);
+          
+          // S'assurer que waybillItems est un tableau avant d'utiliser map
+          if (Array.isArray(waybillItems)) {
+            setWaybillItems(waybillItems.map(item => item.id === currentItem.id ? currentItem : item));
+          }
+          
+          setSnackbar({
+            open: true,
+            message: 'Élément mis à jour avec succès',
+            severity: 'success'
+          });
+          setOpenDialog(false);
+        } catch (firstError) {
+          console.error('Erreur lors de la première tentative de mise à jour:', firstError);
+          
+          // Deuxième tentative avec tiret
+          try {
+            console.log(`Tentative de mise à jour avec URL alternative: /api/waybill-items/${currentItem.id}`);
+            await apiService.put(`/api/waybill-items/${currentItem.id}`, currentItem);
+            
+            // S'assurer que waybillItems est un tableau avant d'utiliser map
+            if (Array.isArray(waybillItems)) {
+              setWaybillItems(waybillItems.map(item => item.id === currentItem.id ? currentItem : item));
+            }
+            
+            setSnackbar({
+              open: true,
+              message: 'Élément mis à jour avec succès',
+              severity: 'success'
+            });
+            setOpenDialog(false);
+          } catch (secondError) {
+            console.error('Erreur lors de la seconde tentative de mise à jour:', secondError);
+            
+            // Troisième tentative
+            try {
+              console.log(`Tentative de mise à jour avec troisième URL: /api/waybills/${currentItem.id}`);
+              await apiService.put(`/api/waybills/${currentItem.id}`, currentItem);
+              
+              // S'assurer que waybillItems est un tableau avant d'utiliser map
+              if (Array.isArray(waybillItems)) {
+                setWaybillItems(waybillItems.map(item => item.id === currentItem.id ? currentItem : item));
+              }
+              
+              setSnackbar({
+                open: true,
+                message: 'Élément mis à jour avec succès',
+                severity: 'success'
+              });
+              setOpenDialog(false);
+            } catch (thirdError) {
+              console.error('Erreur lors de la troisième tentative de mise à jour:', thirdError);
+              setSnackbar({
+                open: true,
+                message: 'Erreur lors de la mise à jour des données. Vérifiez la connexion au serveur.',
+                severity: 'error'
+              });
+            }
+          }
         }
-        setSnackbar({
-          open: true,
-          message: 'Élément mis à jour avec succès',
-          severity: 'success'
-        });
       } else {
-        const response = await apiService.post('/api/waybill-items', currentItem);
-        // S'assurer que waybillItems est un tableau avant d'utiliser le spread operator
-        setWaybillItems(Array.isArray(waybillItems) ? [...waybillItems, response.data] : [response.data]);
-        setSnackbar({
-          open: true,
-          message: 'Nouvel élément ajouté avec succès',
-          severity: 'success'
-        });
+        // Ajout d'un nouvel élément
+        console.log('Tentative d\'ajout avec première URL: /api/waybill_items');
+        try {
+          // Première tentative avec underscore
+          const response = await apiService.post('/api/waybill_items', currentItem);
+          
+          // S'assurer que waybillItems est un tableau avant d'utiliser le spread operator
+          setWaybillItems(Array.isArray(waybillItems) ? [...waybillItems, response.data] : [response.data]);
+          
+          setSnackbar({
+            open: true,
+            message: 'Nouvel élément ajouté avec succès',
+            severity: 'success'
+          });
+          setOpenDialog(false);
+        } catch (firstError) {
+          console.error('Erreur lors de la première tentative d\'ajout:', firstError);
+          
+          // Deuxième tentative avec tiret
+          try {
+            console.log('Tentative d\'ajout avec URL alternative: /api/waybill-items');
+            const response = await apiService.post('/api/waybill-items', currentItem);
+            
+            // S'assurer que waybillItems est un tableau avant d'utiliser le spread operator
+            setWaybillItems(Array.isArray(waybillItems) ? [...waybillItems, response.data] : [response.data]);
+            
+            setSnackbar({
+              open: true,
+              message: 'Nouvel élément ajouté avec succès',
+              severity: 'success'
+            });
+            setOpenDialog(false);
+          } catch (secondError) {
+            console.error('Erreur lors de la seconde tentative d\'ajout:', secondError);
+            
+            // Troisième tentative
+            try {
+              console.log('Tentative d\'ajout avec troisième URL: /api/waybills');
+              const response = await apiService.post('/api/waybills', currentItem);
+              
+              // S'assurer que waybillItems est un tableau avant d'utiliser le spread operator
+              setWaybillItems(Array.isArray(waybillItems) ? [...waybillItems, response.data] : [response.data]);
+              
+              setSnackbar({
+                open: true,
+                message: 'Nouvel élément ajouté avec succès',
+                severity: 'success'
+              });
+              setOpenDialog(false);
+            } catch (thirdError) {
+              console.error('Erreur lors de la troisième tentative d\'ajout:', thirdError);
+              setSnackbar({
+                open: true,
+                message: 'Erreur lors de l\'enregistrement des données. Vérifiez la connexion au serveur.',
+                severity: 'error'
+              });
+            }
+          }
+        }
       }
-      setOpenDialog(false);
     } catch (error) {
-      console.error('Erreur lors de l\'enregistrement:', error);
+      console.error('Erreur générale lors de l\'enregistrement:', error);
       setSnackbar({
         open: true,
         message: 'Erreur lors de l\'enregistrement des données',
         severity: 'error'
       });
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -357,41 +704,66 @@ const ReceptionWaybill: React.FC = () => {
   const handleCloseSnackbar = () => {
     setSnackbar({ ...snackbar, open: false });
   };
+  
+  // Calculer les totaux pour l'affichage en bas du tableau
+  const calculateTotals = (): WaybillTotals => {
+    if (!Array.isArray(filteredItems) || filteredItems.length === 0) {
+      return {
+        quantity_sent: 0,
+        tonne_sent: 0,
+        quantity: 0,
+        tonne_received: 0,
+        loss: 0,
+        mount_in: 0,
+        return_qty: 0
+      };
+    }
+    
+    return filteredItems.reduce((totals, item) => {
+      return {
+        quantity_sent: totals.quantity_sent + (Number(item.quantity_sent) || 0),
+        tonne_sent: totals.tonne_sent + (Number(item.tonne_sent) || 0),
+        quantity: totals.quantity + (Number(item.quantity) || 0),
+        tonne_received: totals.tonne_received + (Number(item.tonne_received) || 0),
+        loss: totals.loss + (Number(item.loss) || 0),
+        mount_in: totals.mount_in + (Number(item.mount_in) || 0),
+        return_qty: totals.return_qty + (Number(item.return_qty) || 0)
+      };
+    }, {
+      quantity_sent: 0,
+      tonne_sent: 0,
+      quantity: 0,
+      tonne_received: 0,
+      loss: 0,
+      mount_in: 0,
+      return_qty: 0
+    });
+  };
+  
+  // Obtenir les totaux calculés
+  const totals: WaybillTotals = calculateTotals();
 
   return (
     <PageTransition>
-      <Box sx={{ p: 3, maxWidth: '1400px', mx: 'auto' }}>
-        <Typography 
-          variant="h4" 
-          className="section-header"
-          sx={{ 
-            mb: 3, 
-            fontWeight: 600,
-            color: '#0f172a',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}
-        >
-          <span>Réception des Waybills</span>
-        </Typography>
+      <Box sx={{ p: 3, backgroundColor: '#f8fafc' }}>
+        <Paper elevation={3} sx={styles.container}>
+          <Box sx={styles.header}>
+            <Typography variant="h4" sx={styles.title}>
+              Réception des Waybills
+            </Typography>
+            <Typography variant="body1" sx={styles.subtitle}>
+              Gérez la réception et le suivi des waybills pour les distributions
+            </Typography>
+          </Box>
 
-        {/* Barre de recherche et bouton d'ajout */}
-        <Paper 
-          elevation={2} 
-          sx={{ 
-            p: 3, 
-            mb: 4, 
-            borderRadius: '12px',
-            backgroundColor: '#ffffff'
-          }}
-        >
-          <Box sx={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center', 
-            mb: 2 
-          }}>
+          {/* Barre de recherche et bouton d'ajout */}
+          <Box sx={{ mb: 4 }}>
+            <Box sx={{ 
+              display: 'flex', 
+              justifyContent: 'space-between', 
+              alignItems: 'center', 
+              mb: 2 
+            }}>
             <Typography variant="h6" sx={{ fontWeight: 600, color: '#003C5F' }}>
               Gestion des Waybills
             </Typography>
@@ -426,13 +798,11 @@ const ReceptionWaybill: React.FC = () => {
                 startIcon={<AddIcon />}
                 onClick={handleAddNew}
                 sx={{ 
-                  borderRadius: '8px',
-                  textTransform: 'none',
-                  fontWeight: 600,
+                  ...styles.button,
+                  ...styles.primaryButton,
                   px: 3,
                   py: 1,
-                  background: 'linear-gradient(45deg, #0078BE 30%, #0091E6 90%)',
-                  boxShadow: '0 2px 8px rgba(0, 120, 190, 0.3)'
+                  minWidth: '180px'
                 }}
               >
                 Ajouter un waybill
@@ -448,39 +818,16 @@ const ReceptionWaybill: React.FC = () => {
               fullWidth
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              sx={{
-                '& .MuiOutlinedInput-root': {
-                  borderRadius: '8px',
-                  '& fieldset': {
-                    borderColor: '#e2e8f0',
-                    borderWidth: '1.5px'
-                  },
-                  '&:hover fieldset': {
-                    borderColor: '#94a3b8',
-                  },
-                  '&.Mui-focused fieldset': {
-                    borderColor: '#0078BE',
-                  }
-                }
-              }}
+              sx={styles.searchBar}
               InputProps={{
                 endAdornment: <SearchIcon sx={{ color: '#64748b' }} />
               }}
             />
           </Box>
-        </Paper>
 
-        {/* Tableau des données */}
-        <Paper 
-          elevation={2}
-          sx={{ 
-            mb: 4, 
-            overflowX: 'auto',
-            borderRadius: '12px',
-            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.05)'
-          }}
-        >
-          <Box sx={{ p: 2, borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          {/* Tableau des données */}
+          <Box sx={{ mb: 4 }}>
+            <Box sx={{ p: 3, borderBottom: '1px solid #e2e8f0', display: 'flex', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#f8fafc' }}>
             <Typography variant="h6" sx={{ fontWeight: 600, color: '#003C5F' }}>
               Liste des Waybills
             </Typography>
@@ -488,10 +835,10 @@ const ReceptionWaybill: React.FC = () => {
               {filteredItems.length} waybills trouvés
             </Typography>
           </Box>
-          <TableContainer sx={{ maxHeight: '600px' }}>
-          <Table size="small" stickyHeader>
+            <TableContainer sx={{ maxHeight: '600px' }}>
+              <Table size="small" stickyHeader>
             <TableHead>
-              <TableRow sx={{ backgroundColor: '#f8fafc' }}>
+              <TableRow sx={styles.tableHeader}>
                 <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Waybill #</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Batch #</TableCell>
                 <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Commodity</TableCell>
@@ -534,7 +881,7 @@ const ReceptionWaybill: React.FC = () => {
                 </TableRow>
               ) : (
                 filteredItems.map((item) => (
-                  <TableRow key={item.id}>
+                  <TableRow key={item.id} sx={styles.tableRow}>
                     <TableCell>{item.waybill_number}</TableCell>
                     <TableCell>{item.batchnumber}</TableCell>
                     <TableCell>{item.commodity_specific}</TableCell>
@@ -587,18 +934,42 @@ const ReceptionWaybill: React.FC = () => {
                   </TableRow>
                 ))
               )}
+              
+              {/* Ligne des totaux */}
+              {filteredItems.length > 0 && (
+                <TableRow sx={{ 
+                  backgroundColor: '#f1f5f9', 
+                  fontWeight: 'bold',
+                  '& td': { fontWeight: 700, color: '#0f172a', borderTop: '2px solid #cbd5e1' }
+                }}>
+                  <TableCell colSpan={4} sx={{ fontWeight: 700 }}>TOTAUX</TableCell>
+                  <TableCell align="right">{totals?.quantity_sent?.toLocaleString('fr-FR') || '0'}</TableCell>
+                  <TableCell>-</TableCell>
+                  <TableCell align="right">{Number(totals?.tonne_sent || 0).toFixed(3)} T</TableCell>
+                  <TableCell align="right">{totals?.quantity?.toLocaleString('fr-FR') || '0'}</TableCell>
+                  <TableCell>-</TableCell>
+                  <TableCell align="right">{Number(totals?.tonne_received || 0).toFixed(3)} T</TableCell>
+                  <TableCell>-</TableCell>
+                  <TableCell>-</TableCell>
+                  <TableCell align="right">{totals?.loss?.toLocaleString('fr-FR') || '0'}</TableCell>
+                  <TableCell align="right">{totals?.mount_in?.toLocaleString('fr-FR') || '0'}</TableCell>
+                  <TableCell align="right">{totals?.return_qty?.toLocaleString('fr-FR') || '0'}</TableCell>
+                  <TableCell colSpan={3}>-</TableCell>
+                </TableRow>
+              )}
             </TableBody>
-          </Table>
-          </TableContainer>
-        </Paper>
+              </Table>
+            </TableContainer>
+          </Box>
+          </Box>
 
-        {/* Dialogue pour ajouter/modifier un élément */}
-        <Dialog 
-          open={openDialog} 
-          onClose={() => setOpenDialog(false)} 
-          maxWidth="md" 
-          fullWidth
-          PaperProps={{
+          {/* Dialogue pour ajouter/modifier un élément */}
+          <Dialog 
+            open={openDialog} 
+            onClose={() => setOpenDialog(false)} 
+            maxWidth="md" 
+            fullWidth
+            PaperProps={{
             sx: {
               borderRadius: '12px',
               boxShadow: '0 10px 35px rgba(0, 0, 0, 0.1)',
@@ -617,43 +988,53 @@ const ReceptionWaybill: React.FC = () => {
           }}>
             {isEditing ? 'Modifier le waybill' : 'Ajouter un nouveau waybill'}
           </DialogTitle>
-          <DialogContent>
+          <DialogContent sx={{ p: 3, mt: 1 }}>
             <Grid container spacing={2} sx={{ mt: 1 }}>
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="waybill_number"
-                  label="Waybill #"
+                  label="Waybill Number"
                   fullWidth
+                  required
                   value={currentItem.waybill_number}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="batchnumber"
-                  label="Batch #"
+                  label="Batch Number"
                   fullWidth
+                  required
                   value={currentItem.batchnumber}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <TextField
                   name="commodity_specific"
-                  label="Commodity"
+                  label="Commodity Specific"
                   fullWidth
+                  required
                   value={currentItem.commodity_specific}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  helperText="Ex: Huile, Farine, Haricot, Sel, etc."
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
-                <FormControl fullWidth>
+                <FormControl fullWidth sx={styles.formField}>
                   <InputLabel>Type</InputLabel>
                   <Select
                     name="type"
-                    value={currentItem.type}
-                    label="Type"
+                    value={currentItem.type || ''}
                     onChange={handleSelectChange}
+                    variant="outlined"
                   >
                     {typeOptions.map(option => (
                       <MenuItem key={option} value={option}>{option}</MenuItem>
@@ -667,18 +1048,24 @@ const ReceptionWaybill: React.FC = () => {
                   label="Quantity Sent"
                   type="number"
                   fullWidth
+                  required
                   value={currentItem.quantity_sent}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  InputProps={{
+                    inputProps: { min: 0 }
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={4}>
-                <FormControl fullWidth>
+                <FormControl fullWidth sx={styles.formField}>
                   <InputLabel>Unit Sent</InputLabel>
                   <Select
                     name="unit_sent"
-                    value={currentItem.unit_sent}
-                    label="Unit Sent"
+                    value={currentItem.unit_sent || ''}
                     onChange={handleSelectChange}
+                    variant="outlined"
                   >
                     {unitOptions.map(option => (
                       <MenuItem key={option} value={option}>{option}</MenuItem>
@@ -694,6 +1081,10 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.tonne_sent}
                   InputProps={{ readOnly: true }}
+                  sx={styles.formField}
+                  variant="outlined"
+                  disabled
+                  helperText="Calculé automatiquement"
                 />
               </Grid>
               <Grid item xs={12} sm={4}>
@@ -702,18 +1093,24 @@ const ReceptionWaybill: React.FC = () => {
                   label="Quantity Received"
                   type="number"
                   fullWidth
+                  required
                   value={currentItem.quantity}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  InputProps={{
+                    inputProps: { min: 0 }
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={4}>
-                <FormControl fullWidth>
+                <FormControl fullWidth sx={styles.formField}>
                   <InputLabel>Unit Received</InputLabel>
                   <Select
                     name="unit_received"
-                    value={currentItem.unit_received}
-                    label="Unit Received"
+                    value={currentItem.unit_received || ''}
                     onChange={handleSelectChange}
+                    variant="outlined"
                   >
                     {unitOptions.map(option => (
                       <MenuItem key={option} value={option}>{option}</MenuItem>
@@ -729,6 +1126,10 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.tonne_received}
                   InputProps={{ readOnly: true }}
+                  sx={styles.formField}
+                  variant="outlined"
+                  disabled
+                  helperText="Calculé automatiquement"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -738,6 +1139,10 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.obs}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  multiline
+                  rows={2}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -748,6 +1153,10 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.loss}
                   InputProps={{ readOnly: true }}
+                  sx={styles.formField}
+                  variant="outlined"
+                  disabled
+                  helperText="Calculé automatiquement"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -758,6 +1167,11 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.mount_in}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  InputProps={{
+                    inputProps: { min: 0 }
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -768,6 +1182,11 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.return_qty}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  InputProps={{
+                    inputProps: { min: 0 }
+                  }}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -777,6 +1196,8 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.activity}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
@@ -785,7 +1206,13 @@ const ReceptionWaybill: React.FC = () => {
                     label="Date"
                     value={dayjs(currentItem.date)}
                     onChange={handleDateChange}
-                    slotProps={{ textField: { fullWidth: true } }}
+                    slotProps={{ 
+                      textField: { 
+                        fullWidth: true,
+                        sx: styles.formField,
+                        variant: "outlined"
+                      } 
+                    }}
                   />
                 </LocalizationProvider>
               </Grid>
@@ -796,6 +1223,8 @@ const ReceptionWaybill: React.FC = () => {
                   fullWidth
                   value={currentItem.location}
                   onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
                 />
               </Grid>
             </Grid>
@@ -817,13 +1246,10 @@ const ReceptionWaybill: React.FC = () => {
               variant="contained" 
               color="primary"
               sx={{ 
-                borderRadius: '8px',
-                textTransform: 'none',
-                fontWeight: 600,
+                ...styles.button,
+                ...styles.primaryButton,
                 px: 3,
-                py: 1,
-                background: 'linear-gradient(45deg, #0078BE 30%, #0091E6 90%)',
-                boxShadow: '0 2px 8px rgba(0, 120, 190, 0.3)'
+                py: 1
               }}
             >
               {isEditing ? 'Mettre à jour' : 'Ajouter'}
@@ -851,6 +1277,7 @@ const ReceptionWaybill: React.FC = () => {
             {snackbar.message}
           </Alert>
         </Snackbar>
+        </Paper>
       </Box>
     </PageTransition>
   );
