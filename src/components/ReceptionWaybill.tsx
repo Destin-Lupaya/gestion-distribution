@@ -63,6 +63,7 @@ interface WaybillItem {
   reception_date?: string;
   location?: string;
   status?: string;
+  poids_unitaire?: number; // Poids unitaire en kg pour calculer le tonnage
 }
 
 interface WaybillTotals {
@@ -89,6 +90,7 @@ const initialWaybillItem: WaybillItem = {
   quantity: 0,
   unit: 'kg',
   unit_received: 'kg',
+  poids_unitaire: 1, // Valeur par défaut pour le poids unitaire (en kg)
   tonne_received: 0,
   obs: '',
   loss: 0,
@@ -472,17 +474,16 @@ const ReceptionWaybill: React.FC = () => {
     });
   };
 
-  // Calculer automatiquement les tonnes en fonction de la quantité et du type de produit
+  // Calculer automatiquement les tonnes en fonction de la quantité et du poids unitaire
   useEffect(() => {
     if (currentItem.quantity_sent && currentItem.quantity_sent > 0) {
       let tonneSent = 0;
-      // Calculer le tonnage envoyé en fonction de l'unité
-      if (currentItem.unit_sent === 'kg') {
-        tonneSent = (currentItem.quantity_sent || 0) / 1000;
-      } else {
-        // Déterminer le poids unitaire pour le calcul du tonnage envoyé
+      // Déterminer le poids unitaire pour le calcul du tonnage envoyé
+      let poidsUnitaire = currentItem.poids_unitaire || 0;
+      
+      // Si le poids unitaire n'est pas défini, essayer de le déterminer automatiquement
+      if (!poidsUnitaire) {
         const commodityLower = (currentItem.commodity_specific || '').toLowerCase();
-        let poidsUnitaire = 0;
         
         if (commodityLower.includes('huile')) {
           poidsUnitaire = 20; // 20kg par carton d'huile
@@ -492,45 +493,33 @@ const ReceptionWaybill: React.FC = () => {
           poidsUnitaire = 50; // 50kg par sac de haricot
         } else if (commodityLower.includes('sel')) {
           poidsUnitaire = 25; // 25kg par sac de sel
+        } else if (currentItem.unit_sent === 'kg') {
+          poidsUnitaire = 1; // 1kg par unité pour les kg
         } else {
           poidsUnitaire = 1; // Valeur par défaut
         }
         
-        tonneSent = ((currentItem.quantity_sent || 0) * poidsUnitaire) / 1000;
+        // Mettre à jour le poids unitaire dans l'objet
+        setCurrentItem(prev => ({ ...prev, poids_unitaire: poidsUnitaire }));
       }
+      
+      // Calculer le tonnage selon la formule: poids unitaire * quantité / 1000
+      tonneSent = ((currentItem.quantity_sent || 0) * poidsUnitaire) / 1000;
       setCurrentItem(prev => ({ ...prev, tonne_sent: tonneSent }));
     }
-    
+  }, [currentItem.quantity_sent, currentItem.unit_sent, currentItem.commodity_specific, currentItem.poids_unitaire]);
+
+  // Calculer automatiquement les tonnes reçues en fonction de la quantité et du poids unitaire
+  useEffect(() => {
     if (currentItem.quantity && currentItem.quantity > 0) {
-      // Déterminer le poids unitaire en fonction du type de produit
-      let poidsUnitaire = 0;
-      const commodityLower = (currentItem.commodity_specific || '').toLowerCase();
+      // Utiliser le même poids unitaire que pour l'envoi
+      const poidsUnitaire = currentItem.poids_unitaire || 1;
       
-      if (commodityLower.includes('huile')) {
-        // Poids d'un carton d'huile (en kg)
-        poidsUnitaire = 20; // 20kg par carton d'huile
-      } else if (commodityLower.includes('farine')) {
-        // Poids d'un sac de farine (en kg)
-        poidsUnitaire = 25; // 25kg par sac de farine
-      } else if (commodityLower.includes('haricot')) {
-        // Poids d'un sac de haricot (en kg)
-        poidsUnitaire = 50; // 50kg par sac de haricot
-      } else if (commodityLower.includes('sel')) {
-        // Poids d'un sac de sel (en kg)
-        poidsUnitaire = 25; // 25kg par sac de sel
-      } else if (currentItem.unit_received === 'kg') {
-        // Pour les autres produits en kg, utiliser la conversion standard
-        poidsUnitaire = 1;
-      } else {
-        // Pour les autres unités, déterminer selon le cas
-        poidsUnitaire = 0;
-      }
-      
-      // Calculer le tonnage en fonction du poids unitaire
+      // Calculer le tonnage selon la formule: poids unitaire * quantité / 1000
       const tonneReceived = ((currentItem.quantity || 0) * poidsUnitaire) / 1000;
       setCurrentItem(prev => ({ ...prev, tonne_received: tonneReceived }));
     }
-  }, [currentItem.quantity_sent, currentItem.unit_sent, currentItem.quantity, currentItem.unit_received, currentItem.commodity_specific]);
+  }, [currentItem.quantity, currentItem.poids_unitaire]);
 
   // Calculer automatiquement la perte
   useEffect(() => {
@@ -1056,6 +1045,40 @@ const ReceptionWaybill: React.FC = () => {
                   InputProps={{
                     inputProps: { min: 0 }
                   }}
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  name="poids_unitaire"
+                  label="Poids unitaire (kg)"
+                  type="number"
+                  fullWidth
+                  required
+                  value={currentItem.poids_unitaire}
+                  onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  InputProps={{
+                    inputProps: { min: 0, step: 0.1 }
+                  }}
+                  helperText="Poids d'une unité en kg"
+                />
+              </Grid>
+              <Grid item xs={12} sm={4}>
+                <TextField
+                  name="poids_unitaire"
+                  label="Poids unitaire (kg)"
+                  type="number"
+                  fullWidth
+                  required
+                  value={currentItem.poids_unitaire}
+                  onChange={handleChange}
+                  sx={styles.formField}
+                  variant="outlined"
+                  InputProps={{
+                    inputProps: { min: 0, step: 0.1 }
+                  }}
+                  helperText="Poids d'une unité en kg"
                 />
               </Grid>
               <Grid item xs={12} sm={4}>

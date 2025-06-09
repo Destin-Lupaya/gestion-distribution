@@ -210,7 +210,6 @@ function NutritionDistribution() {
 
     try {
       // Nettoyer et normaliser l'ID de recherche
-      // Supprimer les espaces, points et autres caractères spéciaux
       let rawId = searchId.trim();
       
       // Extraire uniquement les caractères alphanumériques (lettres et chiffres)
@@ -219,91 +218,99 @@ function NutritionDistribution() {
       
       console.log(`ID original: '${rawId}', ID nettoyé: '${cleanSearchId}'`);
       
-      // Stratégie de recherche:
-      // 1. Essayer d'abord avec l'ID complet tel quel (peut inclure R-)
-      // 2. Si ça échoue et que l'ID commence par R-, essayer sans le préfixe
-      // 3. Si ça échoue et que l'ID ne commence pas par R-, essayer avec le préfixe
-      
+      // Stratégie de recherche améliorée avec plusieurs endpoints et formats
       let foundBeneficiary = false;
+      let responseData = null;
       
-      // Première tentative: ID tel quel
-      try {
-        console.log(`Tentative 1: Recherche avec ID: '${cleanSearchId}'`);
-        // Assurer que l'URL est correctement formée
-        const endpoint = `/api/nutrition/beneficiaires/${encodeURIComponent(cleanSearchId)}`;
-        console.log(`Appel API: ${endpoint}`);
-        const response = await apiService.get(endpoint);
+      // Liste des endpoints à essayer
+      const endpoints = [
+        `/api/nutrition/beneficiaires/${encodeURIComponent(cleanSearchId)}`,
+        `/api/nutrition/beneficiaire/${encodeURIComponent(cleanSearchId)}`,
+        `/api/beneficiaires/nutrition/${encodeURIComponent(cleanSearchId)}`,
+        `/api/beneficiaires/${encodeURIComponent(cleanSearchId)}`
+      ];
+      
+      // Essayer chaque endpoint avec l'ID tel quel
+      for (const endpoint of endpoints) {
+        if (foundBeneficiary) break;
         
-        if (response.data) {
-          console.log('Bénéficiaire trouvé avec le format exact');
-          setBeneficiaire(response.data);
-          await fetchDistributions(response.data.nutrition_rations[0]?.id);
-          foundBeneficiary = true;
-        }
-      } catch (firstError) {
-        console.log('Première tentative échouée');
-      }
-      
-      // Deuxième tentative: format alternatif
-      if (!foundBeneficiary) {
         try {
-          let alternativeId;
-          
-          if (cleanSearchId.toUpperCase().startsWith('R-')) {
-            // Si l'ID commence par R-, essayer sans le préfixe
-            alternativeId = cleanSearchId.substring(2);
-            console.log(`Tentative 2: Essai sans préfixe: '${alternativeId}'`);
-          } else {
-            // Si l'ID ne commence pas par R-, essayer avec le préfixe
-            alternativeId = `R-${cleanSearchId}`;
-            console.log(`Tentative 2: Essai avec préfixe: '${alternativeId}'`);
-          }
-          
-          // Assurer que l'URL est correctement formée
-          const endpoint = `/api/nutrition/beneficiaires/${encodeURIComponent(alternativeId)}`;
-          console.log(`Appel API: ${endpoint}`);
+          console.log(`Tentative avec endpoint: ${endpoint}`);
           const response = await apiService.get(endpoint);
           
-          if (response.data) {
-            console.log('Bénéficiaire trouvé avec le format alternatif');
-            setBeneficiaire(response.data);
-            await fetchDistributions(response.data.nutrition_rations[0]?.id);
+          if (response && (response.data || (Array.isArray(response) && response.length > 0))) {
+            console.log(`Bénéficiaire trouvé avec l'endpoint: ${endpoint}`);
+            responseData = response.data || response;
             foundBeneficiary = true;
+            break;
           }
-        } catch (secondError) {
-          console.log('Deuxième tentative échouée');
+        } catch (error) {
+          console.log(`Échec avec l'endpoint: ${endpoint}`, error);
         }
       }
       
-      // Troisième tentative: uniquement la partie numérique
+      // Si pas trouvé, essayer avec des formats alternatifs d'ID
       if (!foundBeneficiary) {
-        try {
-          // Extraire uniquement les chiffres
-          const numericPart = cleanSearchId.replace(/\D/g, '');
+        // Format alternatifs à essayer
+        const alternativeIds = [];
+        
+        // Si l'ID commence par R-, essayer sans le préfixe
+        if (cleanSearchId.toUpperCase().startsWith('R-')) {
+          alternativeIds.push(cleanSearchId.substring(2));
+        } else {
+          // Si l'ID ne commence pas par R-, essayer avec le préfixe
+          alternativeIds.push(`R-${cleanSearchId}`);
+        }
+        
+        // Ajouter la partie numérique uniquement
+        const numericPart = cleanSearchId.replace(/\D/g, '');
+        if (numericPart && numericPart !== cleanSearchId) {
+          alternativeIds.push(numericPart);
+        }
+        
+        // Essayer chaque format alternatif avec chaque endpoint
+        for (const altId of alternativeIds) {
+          if (foundBeneficiary) break;
           
-          if (numericPart && numericPart !== cleanSearchId) {
-            console.log(`Tentative 3: Essai avec uniquement la partie numérique: '${numericPart}'`);
+          for (const baseEndpoint of endpoints) {
+            if (foundBeneficiary) break;
             
-            // Assurer que l'URL est correctement formée
-            const endpoint = `/api/nutrition/beneficiaires/${encodeURIComponent(numericPart)}`;
-            console.log(`Appel API: ${endpoint}`);
-            const response = await apiService.get(endpoint);
+            const endpoint = baseEndpoint.replace(encodeURIComponent(cleanSearchId), encodeURIComponent(altId));
             
-            if (response.data) {
-              console.log('Bénéficiaire trouvé avec la partie numérique');
-              setBeneficiaire(response.data);
-              await fetchDistributions(response.data.nutrition_rations[0]?.id);
-              foundBeneficiary = true;
+            try {
+              console.log(`Tentative avec format alternatif: ${endpoint}`);
+              const response = await apiService.get(endpoint);
+              
+              if (response && (response.data || (Array.isArray(response) && response.length > 0))) {
+                console.log(`Bénéficiaire trouvé avec format alternatif: ${endpoint}`);
+                responseData = response.data || response;
+                foundBeneficiary = true;
+                break;
+              }
+            } catch (error) {
+              console.log(`Échec avec format alternatif: ${endpoint}`, error);
             }
           }
-        } catch (thirdError) {
-          console.log('Troisième tentative échouée');
         }
       }
       
-      // Si toutes les tentatives échouent
-      if (!foundBeneficiary) {
-        setError(`Bénéficiaire non trouvé avec l'identifiant "${searchId}". Veuillez vérifier que le numéro d'enregistrement est correct et essayez à nouveau. Nous avons essayé plusieurs formats (avec/sans préfixe R-, partie numérique seule) mais aucun résultat n'a été trouvé. Si le problème persiste, contactez l'administrateur système.`);
+      // Si un bénéficiaire a été trouvé
+      if (foundBeneficiary && responseData) {
+        console.log('Données du bénéficiaire trouvées:', responseData);
+        setBeneficiaire(responseData);
+        
+        // Vérifier si nous avons des données de ration et tenter de récupérer les distributions
+        if (responseData.nutrition_rations && responseData.nutrition_rations.length > 0) {
+          await fetchDistributions(responseData.nutrition_rations[0]?.id);
+        } else if (responseData.rations && responseData.rations.length > 0) {
+          await fetchDistributions(responseData.rations[0]?.id);
+        } else if (responseData.id) {
+          // Essayer de récupérer les distributions directement avec l'ID du bénéficiaire
+          await fetchDistributions(responseData.id);
+        }
+      } else {
+        // Si toutes les tentatives échouent
+        setError(`Bénéficiaire non trouvé avec l'identifiant "${searchId}". Veuillez vérifier que le numéro d'enregistrement est correct et essayez à nouveau. Nous avons essayé plusieurs formats et endpoints mais aucun résultat n'a été trouvé. Si le problème persiste, contactez l'administrateur système.`);
       }
     } catch (err: any) {
       console.error('Error searching beneficiary:', err);
@@ -316,15 +323,42 @@ function NutritionDistribution() {
 
   const fetchDistributions = async (rationId: string) => {
     if (!rationId) return;
-
-    try {
-      const response = await apiService.get(`/api/nutrition/distributions/${rationId}`);
-
-      if (response.error) throw new Error(response.error);
-
-      setDistributions(response.data || []);
-    } catch (err) {
-      console.error('Error fetching distributions:', err);
+    
+    console.log(`Tentative de récupération des distributions pour l'ID: ${rationId}`);
+    
+    // Liste des endpoints à essayer
+    const endpoints = [
+      `/api/nutrition/distributions/${rationId}`,
+      `/api/nutrition/distribution/${rationId}`,
+      `/api/distributions/nutrition/${rationId}`,
+      `/api/distributions/${rationId}`
+    ];
+    
+    let distributionsFound = false;
+    
+    // Essayer chaque endpoint
+    for (const endpoint of endpoints) {
+      if (distributionsFound) break;
+      
+      try {
+        console.log(`Tentative avec endpoint: ${endpoint}`);
+        const response = await apiService.get(endpoint);
+        
+        if (response && !response.error) {
+          const data = response.data || (Array.isArray(response) ? response : []);
+          console.log(`Distributions trouvées avec l'endpoint: ${endpoint}`, data);
+          setDistributions(data);
+          distributionsFound = true;
+          break;
+        }
+      } catch (error) {
+        console.log(`Échec avec l'endpoint: ${endpoint}`, error);
+      }
+    }
+    
+    if (!distributionsFound) {
+      console.warn(`Aucune distribution trouvée pour l'ID: ${rationId} après avoir essayé plusieurs endpoints`);
+      setDistributions([]);
     }
   };
 
