@@ -2260,57 +2260,45 @@ app.get('/api/evenements-distribution', async (req, res) => {
       // Si la table n'existe pas, la créer
       await connection.query(`
         CREATE TABLE IF NOT EXISTS evenements_distribution (
-          id VARCHAR(36) PRIMARY KEY,
-          titre VARCHAR(255) NOT NULL,
-          description TEXT,
-          date_debut DATETIME NOT NULL,
-          date_fin DATETIME NOT NULL,
-          statut ENUM('planifié', 'en_cours', 'terminé', 'annulé') DEFAULT 'planifié',
-          site_id VARCHAR(36),
-          programme_id VARCHAR(36),
-          nom_programme VARCHAR(255),
-          nom_site VARCHAR(255),
-          date_distribution_prevue DATETIME,
-          type_assistance_prevue VARCHAR(255),
-          quantite_totale_prevue TEXT,
+          evenement_id VARCHAR(36) PRIMARY KEY,
+          programme_id VARCHAR(36) NOT NULL,
+          site_id INT NOT NULL,
+          date_distribution_prevue DATE NOT NULL,
+          heure_debut_prevue TIME NULL,
+          heure_fin_prevue TIME NULL,
+          type_assistance_prevue VARCHAR(255) NOT NULL,
+          quantite_totale_prevue JSON NULL,
+          statut_evenement ENUM('Planifié', 'En cours', 'Terminé', 'Annulé') DEFAULT 'Planifié',
           created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
           updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-          FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE SET NULL,
-          FOREIGN KEY (programme_id) REFERENCES programmes(id) ON DELETE SET NULL
+          FOREIGN KEY (programme_id) REFERENCES programmes(id) ON DELETE CASCADE,
+          FOREIGN KEY (site_id) REFERENCES sites(id) ON DELETE CASCADE
         )
       `);
       
       // Insérer quelques données de test
       await connection.query(`
         INSERT INTO evenements_distribution (
-          id, 
-          titre, 
-          description, 
-          date_debut, 
-          date_fin, 
-          statut, 
-          site_id, 
+          evenement_id, 
           programme_id, 
-          nom_programme, 
-          nom_site, 
+          site_id, 
           date_distribution_prevue, 
+          heure_debut_prevue, 
+          heure_fin_prevue, 
           type_assistance_prevue, 
-          quantite_totale_prevue
+          quantite_totale_prevue,
+          statut_evenement
         )
         SELECT 
           UUID(), 
-          CONCAT('Distribution à ', s.nom), 
-          CONCAT('Distribution de fournitures dans le cadre du programme ', p.nom), 
-          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY), 
-          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) + 1 DAY), 
-          'planifié',
-          s.id,
           p.id,
-          p.nom,
-          s.nom,
-          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY),
+          s.id,
+          DATE_ADD(CURDATE(), INTERVAL FLOOR(RAND() * 30) DAY), 
+          '09:00:00',
+          '16:00:00',
           'Ration alimentaire standard',
-          '{"riz": 500, "huile": 200, "sel": 100}'
+          '{"riz": 500, "huile": 200, "sel": 100}',
+          'Planifié'
         FROM sites s, programmes p
         LIMIT 5
       `);
@@ -2321,23 +2309,19 @@ app.get('/api/evenements-distribution', async (req, res) => {
     // Récupérer les données
     const [rows] = await connection.query(`
       SELECT 
-        id,
-        titre,
-        description,
-        date_debut,
-        date_fin,
-        statut,
-        site_id,
+        evenement_id,
         programme_id,
-        nom_programme,
-        nom_site,
+        site_id,
         date_distribution_prevue,
+        heure_debut_prevue,
+        heure_fin_prevue,
         type_assistance_prevue,
         quantite_totale_prevue,
+        statut_evenement AS statut,
         created_at,
         updated_at
       FROM evenements_distribution
-      ORDER BY date_debut DESC
+      ORDER BY date_distribution_prevue DESC
     `);
     
     console.log(`${rows.length} événements de distribution trouvés`);
@@ -2347,6 +2331,196 @@ app.get('/api/evenements-distribution', async (req, res) => {
   } catch (error) {
     console.error('Erreur lors de la récupération des événements de distribution:', error);
     res.status(500).json({ error: String(error) });
+  }
+});
+
+// Route pour récupérer tous les emplacements disponibles
+app.get('/api/locations', async (req, res) => {
+  try {
+    console.log('Récupération des emplacements');
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Récupérer les emplacements uniques depuis la table appropriée
+    // Nous regardons dans les tables distributions et waybill_items pour trouver tous les emplacements
+    const [distributionLocations] = await connection.query(
+      `SELECT DISTINCT location FROM distributions WHERE location IS NOT NULL`
+    );
+    
+    const [waybillLocations] = await connection.query(
+      `SELECT DISTINCT delivery_location FROM waybill_items WHERE delivery_location IS NOT NULL`
+    );
+    
+    // Fusionner les emplacements des deux sources
+    const locations = new Set();
+    
+    distributionLocations.forEach(item => {
+      if (item.location && item.location.trim() !== '') {
+        locations.add(item.location);
+      }
+    });
+    
+    waybillLocations.forEach(item => {
+      if (item.delivery_location && item.delivery_location.trim() !== '') {
+        locations.add(item.delivery_location);
+      }
+    });
+    
+    // Convertir le Set en tableau
+    const uniqueLocations = Array.from(locations);
+    
+    await connection.end();
+    res.json(uniqueLocations);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des emplacements:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des emplacements' });
+  }
+});
+
+// Route pour obtenir les données de comparaison de tonnage entre Waybill et MPOS
+app.get('/api/reports/tonnage-comparison', async (req, res) => {
+  try {
+    const { startDate, endDate, location } = req.query;
+    
+    console.log(`Génération du rapport de comparaison de tonnage du ${startDate} au ${endDate}${location ? ' pour ' + location : ''}`);
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Les dates de début et de fin sont requises' });
+    }
+    
+    const connection = await mysql.createConnection(dbConfig);
+    
+    // Construire la clause WHERE pour filtrer par emplacement si nécessaire
+    let locationFilter = '';
+    if (location && location !== '') {
+      locationFilter = ' AND (w.delivery_location = ? OR d.location = ?)';
+    }
+    
+    // Requête pour obtenir les données de tonnage depuis les tables waybill_items et distribution_items
+    const queryParams = [startDate, endDate];
+    
+    if (location && location !== '') {
+      queryParams.push(location, location);
+    }
+    
+    // Requête pour obtenir les données de Waybill
+    let waybillQuery = `
+      SELECT 
+        commodity_name,
+        SUM(quantity) as total_quantity
+      FROM 
+        waybill_items w
+      WHERE 
+        delivery_date BETWEEN ? AND ?${locationFilter}
+      GROUP BY 
+        commodity_name
+    `;
+    
+    // Requête pour obtenir les données de MPOS
+    let mposQuery = `
+      SELECT 
+        commodity_name,
+        SUM(quantity) as total_quantity
+      FROM 
+        distribution_items di
+      JOIN 
+        distributions d ON di.distribution_id = d.id
+      WHERE 
+        d.distribution_date BETWEEN ? AND ?${locationFilter}
+      GROUP BY 
+        commodity_name
+    `;
+    
+    // Exécuter les requêtes
+    const [waybillResults] = await connection.query(waybillQuery, queryParams);
+    const [mposResults] = await connection.query(mposQuery, queryParams);
+    
+    // Construire un objet pour faciliter la comparaison
+    const commodities = new Set();
+    const waybillData = {};
+    const mposData = {};
+    
+    // Traiter les données de Waybill
+    waybillResults.forEach(item => {
+      const commodity = item.commodity_name;
+      commodities.add(commodity);
+      waybillData[commodity] = parseFloat(item.total_quantity || 0);
+    });
+    
+    // Traiter les données de MPOS
+    mposResults.forEach(item => {
+      const commodity = item.commodity_name;
+      commodities.add(commodity);
+      mposData[commodity] = parseFloat(item.total_quantity || 0);
+    });
+    
+    // Calculer les métriques
+    let totalWaybillTonnage = 0;
+    let totalMposTonnage = 0;
+    let totalHouseholds = 0;
+    let totalBeneficiaries = 0;
+    
+    // Requête pour obtenir les totaux de ménages et bénéficiaires
+    const [totals] = await connection.query(
+      `SELECT 
+        COUNT(DISTINCT household_id) as total_households,
+        SUM(beneficiaries_count) as total_beneficiaries
+      FROM 
+        distributions
+      WHERE 
+        distribution_date BETWEEN ? AND ?${locationFilter}`,
+      queryParams
+    );
+    
+    if (totals.length > 0) {
+      totalHouseholds = parseInt(totals[0].total_households || 0);
+      totalBeneficiaries = parseInt(totals[0].total_beneficiaries || 0);
+    }
+    
+    // Créer les données de comparaison
+    const data = [];
+    commodities.forEach(commodity => {
+      const waybillTonnage = waybillData[commodity] || 0;
+      const mposTonnage = mposData[commodity] || 0;
+      const difference = waybillTonnage - mposTonnage;
+      
+      totalWaybillTonnage += waybillTonnage;
+      totalMposTonnage += mposTonnage;
+      
+      // Générer une recommandation en fonction de la différence
+      let recommendation = '';
+      if (difference > 0) {
+        recommendation = 'Vérifier l\'utilisation des ressources';
+      } else if (difference < 0) {
+        recommendation = 'Vérifier les entrées de Waybill';
+      } else {
+        recommendation = 'Parfait équilibre';
+      }
+      
+      data.push({
+        commodity,
+        waybillTonnage,
+        mposTonnage,
+        difference,
+        recommendation
+      });
+    });
+    
+    // Calculer la différence totale
+    const totalDifference = totalWaybillTonnage - totalMposTonnage;
+    
+    await connection.end();
+    
+    res.json({
+      data,
+      totalWaybillTonnage,
+      totalMposTonnage,
+      totalDifference,
+      totalHouseholds,
+      totalBeneficiaries
+    });
+  } catch (error) {
+    console.error('Erreur lors de la génération du rapport de comparaison de tonnage:', error);
+    res.status(500).json({ error: 'Erreur lors de la génération du rapport de comparaison de tonnage' });
   }
 });
 

@@ -1695,23 +1695,19 @@ app.get('/api/evenements-distribution', async (req, res) => {
     // Récupérer les données
     const [rows] = await connection.query(`
       SELECT 
-        id,
-        titre,
-        description,
-        date_debut,
-        date_fin,
-        statut,
-        site_id,
+        evenement_id,
         programme_id,
-        nom_programme,
-        nom_site,
+        site_id,
         date_distribution_prevue,
+        heure_debut_prevue,
+        heure_fin_prevue,
         type_assistance_prevue,
         quantite_totale_prevue,
+        statut_evenement AS statut,
         created_at,
         updated_at
       FROM evenements_distribution
-      ORDER BY date_debut DESC
+      ORDER BY date_distribution_prevue DESC
     `);
     
     console.log(`${rows.length} événements de distribution trouvés`);
