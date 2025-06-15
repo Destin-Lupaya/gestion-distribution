@@ -3026,6 +3026,186 @@ app.get('/api/reports/tonnage-comparison', async (req, res) => {
   }
 });
 
+// Route pour générer le rapport de comparaison de tonnage entre Waybill et MPOS
+app.get('/api/reports/tonnage-comparison', async (req, res) => {
+  let connection;
+  try {
+    console.log('Génération du rapport de comparaison de tonnage');
+    console.log('Paramètres reçus:', req.query);
+    connection = await pool.getConnection();
+    
+    // Récupérer les paramètres de filtre
+    const { startDate, endDate, location } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Les dates de début et de fin sont requises' });
+    }
+    
+    // Requête pour récupérer les données de tonnage Waybill
+    let waybillQuery = `
+      SELECT 
+        commodity,
+        SUM(tonnage) as total_tonnage
+      FROM waybill_items
+      WHERE received_date BETWEEN ? AND ?`;
+    
+    let waybillParams = [startDate, endDate];
+    
+    // Ajouter le filtre d'emplacement si fourni
+    if (location) {
+      waybillQuery += ` AND delivery_location = ?`;
+      waybillParams.push(location);
+    }
+    
+    waybillQuery += `
+      GROUP BY commodity
+      ORDER BY commodity`;
+    
+    const [waybillResults] = await connection.query(waybillQuery, waybillParams);
+    
+    // Requête pour récupérer les données de tonnage MPOS
+    let mposQuery = `
+      SELECT 
+        p.commodity_type as commodity,
+        SUM(d.quantity * p.unit_weight / 1000) as total_tonnage,
+        SUM(d.number_of_households) as total_households,
+        SUM(d.number_of_beneficiaries) as total_beneficiaries
+      FROM distributions d
+      JOIN products p ON d.product_id = p.id
+      WHERE d.distribution_date BETWEEN ? AND ?`;
+    
+    let mposParams = [startDate, endDate];
+    
+    // Ajouter le filtre d'emplacement si fourni
+    if (location) {
+      mposQuery += ` AND d.location = ?`;
+      mposParams.push(location);
+    }
+    
+    mposQuery += `
+      GROUP BY p.commodity_type
+      ORDER BY p.commodity_type`;
+    
+    const [mposResults] = await connection.query(mposQuery, mposParams);
+    
+    // Créer un tableau pour le rapport de comparaison
+    const commoditySet = new Set();
+    
+    // Ajouter toutes les commodités des deux sources
+    waybillResults.forEach(item => {
+      if (item.commodity) commoditySet.add(item.commodity);
+    });
+    
+    mposResults.forEach(item => {
+      if (item.commodity) commoditySet.add(item.commodity);
+    });
+    
+    // Préparer les données de comparaison
+    let comparisonData = [];
+    let totalWaybillTonnage = 0;
+    let totalScopeTonnage = 0;
+    let totalHouseholds = 0;
+    let totalBeneficiaries = 0;
+    
+    // Convertir commoditySet en tableau trié
+    const commodities = Array.from(commoditySet).sort();
+    
+    // Générer les données de comparaison pour chaque commodity
+    commodities.forEach((commodity, index) => {
+      // Trouver les données correspondantes dans les résultats
+      const waybillItem = waybillResults.find(item => item.commodity === commodity) || { total_tonnage: 0 };
+      const mposItem = mposResults.find(item => item.commodity === commodity) || { 
+        total_tonnage: 0,
+        total_households: 0,
+        total_beneficiaries: 0
+      };
+      
+      // Calculer les différences
+      const waybillTonnage = parseFloat(waybillItem.total_tonnage) || 0;
+      const scopeTonnage = parseFloat(mposItem.total_tonnage) || 0;
+      const difference = scopeTonnage - waybillTonnage;
+      const differencePercentage = waybillTonnage > 0 
+        ? (difference / waybillTonnage * 100).toFixed(2)
+        : 'N/A';
+      
+      // Ajouter aux totaux
+      totalWaybillTonnage += waybillTonnage;
+      totalScopeTonnage += scopeTonnage;
+      totalHouseholds += parseInt(mposItem.total_households || 0, 10);
+      totalBeneficiaries += parseInt(mposItem.total_beneficiaries || 0, 10);
+      
+      // Générer la recommandation
+      let recommendation = '';
+      if (difference > 0) {
+        recommendation = 'Excédent distribué';
+      } else if (difference < 0) {
+        recommendation = 'Déficit distribué';
+      } else {
+        recommendation = 'Distribution équilibrée';
+      }
+      
+      // Ajouter les données de comparaison
+      comparisonData.push({
+        id: index + 1,
+        commodity,
+        waybill_tonnage: waybillTonnage.toFixed(2),
+        scope_tonnage: scopeTonnage.toFixed(2),
+        difference: difference.toFixed(2),
+        difference_percentage: differencePercentage,
+        households: mposItem.total_households || 0,
+        beneficiaries: mposItem.total_beneficiaries || 0,
+        recommendation
+      });
+    });
+    
+    // Calculer la différence totale
+    const totalDifference = totalScopeTonnage - totalWaybillTonnage;
+    const totalDifferencePercentage = totalWaybillTonnage > 0 
+      ? (totalDifference / totalWaybillTonnage * 100).toFixed(2)
+      : 'N/A';
+    
+    // Générer la recommandation totale
+    let totalRecommendation = '';
+    if (totalDifference > 0) {
+      totalRecommendation = 'Excédent global distribué';
+    } else if (totalDifference < 0) {
+      totalRecommendation = 'Déficit global distribué';
+    } else {
+      totalRecommendation = 'Distribution globale équilibrée';
+    }
+    
+    // Ajouter la ligne des totaux
+    comparisonData.push({
+      id: comparisonData.length + 1,
+      commodity: 'Total',
+      waybill_tonnage: totalWaybillTonnage.toFixed(2),
+      scope_tonnage: totalScopeTonnage.toFixed(2),
+      difference: totalDifference.toFixed(2),
+      difference_percentage: totalDifferencePercentage,
+      households: totalHouseholds,
+      beneficiaries: totalBeneficiaries,
+      recommendation: totalRecommendation
+    });
+    
+    // Renvoyer les données de comparaison
+    res.json({
+      comparisonData,
+      totals: {
+        households: totalHouseholds,
+        beneficiaries: totalBeneficiaries,
+        waybill_tonnage: totalWaybillTonnage.toFixed(2),
+        scope_tonnage: totalScopeTonnage.toFixed(2),
+        difference: totalDifference.toFixed(2)
+      }
+    });
+  } catch (error) {
+    console.error('Erreur lors de la génération du rapport de comparaison de tonnage:', error);
+    res.status(500).json({ error: 'Erreur lors de la génération du rapport de comparaison de tonnage' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 app.post('/api/pos-data', async (req, res) => {
   let connection;
   try {
@@ -3170,6 +3350,160 @@ app.delete('/api/geo-points/:id', async (req, res) => {
 });
 
 // ... (code après les modifications)
+// Route pour générer le rapport par batch et commodité
+app.get('/api/reports/batch-commodity', async (req, res) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    
+    const { startDate, endDate, activity, location } = req.query;
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ error: 'Les dates de début et de fin sont requises' });
+    }
+    
+    console.log('Génération du rapport par commodité selon le batch');
+    console.log('Paramètres reçus:', req.query);
+    
+    // Construction de la requête SQL avec filtres conditionnels
+    let query = `
+      SELECT 
+        w.waybill_number,
+        w.activity,
+        w.batch_number as batchNumber,
+        w.specific_commodity as specificCommodity,
+        SUM(w.tonnage) as sentTonnage,
+        COALESCE(SUM(w.internal_movement), 0) as internalMovement,
+        COALESCE(SUM(w.received_quantity), 0) as receivedTonnage,
+        COALESCE(SUM(w.returned_quantity), 0) as returnedQuantity,
+        COALESCE(SUM(w.tonnage - COALESCE(w.received_quantity, 0) - COALESCE(w.returned_quantity, 0)), 0) as losses,
+        w.location
+      FROM waybill_items w
+      WHERE w.received_date BETWEEN ? AND ?`;
+    
+    // Paramètres pour la requête préparée
+    const queryParams = [startDate, endDate];
+    
+    // Ajouter les filtres conditionnels
+    if (activity) {
+      query += ' AND w.activity = ?';
+      queryParams.push(activity);
+    }
+    
+    if (location) {
+      query += ' AND w.location = ?';
+      queryParams.push(location);
+    }
+    
+    // Groupement et tri
+    query += `
+      GROUP BY w.batch_number, w.specific_commodity, w.activity, w.location
+      ORDER BY w.activity, w.batch_number, w.specific_commodity`;
+    
+    // Exécution de la requête
+    const [results] = await connection.query(query, queryParams);
+    
+    // Si aucun résultat, renvoyer un tableau vide plutôt que null
+    if (!results || results.length === 0) {
+      return res.json([]);
+    }
+    
+    res.json(results);
+  } catch (error) {
+    console.error('Erreur lors de la génération du rapport par lot et commodité:', error);
+    res.status(500).json({ error: 'Erreur lors de la génération du rapport' });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
+// Route pour récupérer la liste des activités
+app.get('/api/activities', async (req, res) => {
+  try {
+    console.log('Récupération des activités...');
+    const connection = await pool.getConnection();
+    
+    // Récupérer les activités distinctes depuis waybill_items
+    const [activities] = await connection.query(
+      `SELECT DISTINCT activity FROM waybill_items WHERE activity IS NOT NULL AND activity != ''`
+    );
+    
+    // Transformer les résultats en tableau simple
+    const activityList = activities
+      .map(item => item.activity)
+      .filter(activity => activity && activity.trim() !== '')
+      .sort();
+    
+    console.log(`${activityList.length} activités uniques trouvées`);
+    
+    connection.release();
+    res.json(activityList);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des activités:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des activités' });
+  }
+});
+
+// Route pour récupérer la liste des emplacements
+app.get('/api/locations', async (req, res) => {
+  try {
+    console.log('Récupération des emplacements...');
+    const connection = await pool.getConnection();
+    
+    // Récupérer les noms des sites (qui représentent des emplacements)
+    const [siteLocations] = await connection.query(
+      `SELECT DISTINCT nom FROM sites WHERE nom IS NOT NULL`
+    );
+    
+    // Récupérer les emplacements depuis waybill_items
+    const [waybillLocations] = await connection.query(
+      `SELECT DISTINCT location FROM waybill_items WHERE location IS NOT NULL`
+    );
+    
+    // Récupérer également les delivery_locations s'ils existent
+    let deliveryLocations = [];
+    try {
+      [deliveryLocations] = await connection.query(
+        `SELECT DISTINCT delivery_location FROM waybill_items WHERE delivery_location IS NOT NULL`
+      );
+    } catch (e) {
+      console.log('Colonne delivery_location non trouvée, ignorée');
+    }
+    
+    const locations = new Set();
+    
+    // Ajouter les noms des sites
+    siteLocations.forEach(item => {
+      if (item.nom && item.nom.trim() !== '') {
+        locations.add(item.nom);
+      }
+    });
+    
+    // Ajouter les locations des waybills
+    waybillLocations.forEach(item => {
+      if (item.location && item.location.trim() !== '') {
+        locations.add(item.location);
+      }
+    });
+    
+    // Ajouter les delivery_locations si disponibles
+    deliveryLocations.forEach(item => {
+      if (item.delivery_location && item.delivery_location.trim() !== '') {
+        locations.add(item.delivery_location);
+      }
+    });
+    
+    const uniqueLocations = Array.from(locations).sort();
+    console.log(`${uniqueLocations.length} emplacements uniques trouvés`);
+    
+    connection.release();
+    res.json(uniqueLocations);
+  } catch (error) {
+    console.error('Erreur lors de la récupération des emplacements:', error);
+    res.status(500).json({ error: 'Erreur lors de la récupération des emplacements' });
+  }
+});
+
 app.post('/api/nutrition/distributions', async (req, res) => {
   let connection;
   try {
