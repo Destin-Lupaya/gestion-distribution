@@ -3350,6 +3350,99 @@ app.delete('/api/geo-points/:id', async (req, res) => {
 });
 
 // ... (code après les modifications)
+// Route pour récupérer les éléments des bordereaux de livraison avec pagination
+app.get('/api/waybill-items', async (req, res) => {
+  let connection;
+  try {
+    connection = await pool.getConnection();
+    
+    const { startDate, endDate, location, page = 1, limit = 10 } = req.query;
+    const offset = (parseInt(page) - 1) * parseInt(limit);
+    
+    if (!startDate || !endDate) {
+      return res.status(400).json({ 
+        error: 'Les dates de début et de fin sont requises',
+        data: [],
+        total: 0
+      });
+    }
+    
+    console.log('Récupération des éléments de waybill avec pagination');
+    console.log('Paramètres reçus:', req.query);
+    
+    // Construction de la requête de comptage pour la pagination
+    let countQuery = `
+      SELECT COUNT(*) as total 
+      FROM waybill_items 
+      WHERE date BETWEEN ? AND ?`;
+    
+    // Construction de la requête principale avec filtres conditionnels
+    let query = `
+      SELECT 
+        id,
+        waybill_number,
+        batchnumber as batch_number,
+        commodity_specific as commodity,
+        type,
+        quantity_sent,
+        unit_sent,
+        tonne_sent,
+        quantity,
+        unit_received,
+        tonne_received,
+        obs,
+        loss,
+        mount_in as internal_movement,
+        return_qty as returned_quantity,
+        activity,
+        date,
+        location,
+        created_at,
+        updated_at
+      FROM waybill_items
+      WHERE date BETWEEN ? AND ?`;
+    
+    // Paramètres pour les requêtes préparées
+    const queryParams = [startDate, endDate];
+    const countParams = [startDate, endDate];
+    
+    // Ajouter le filtre d'emplacement si présent
+    if (location) {
+      query += ' AND location = ?';
+      countQuery += ' AND location = ?';
+      queryParams.push(location);
+      countParams.push(location);
+    }
+    
+    // Ajouter le tri et la pagination
+    query += `
+      ORDER BY date DESC, waybill_number
+      LIMIT ? OFFSET ?`;
+    
+    queryParams.push(parseInt(limit), offset);
+    
+    // Exécution des requêtes
+    const [items] = await connection.query(query, queryParams);
+    const [countResult] = await connection.query(countQuery, countParams);
+    
+    const total = countResult[0].total;
+    
+    // Ajouter le total comme propriété de la réponse plutôt que comme objet encapsulant
+    res.set('X-Total-Count', total.toString());
+    res.json(items || []);
+    
+  } catch (error) {
+    console.error('Erreur lors de la récupération des éléments de waybill:', error);
+    res.status(500).json({ 
+      error: 'Erreur lors de la récupération des données', 
+      data: [],
+      total: 0
+    });
+  } finally {
+    if (connection) connection.release();
+  }
+});
+
 // Route pour générer le rapport par batch et commodité
 app.get('/api/reports/batch-commodity', async (req, res) => {
   let connection;
@@ -3403,12 +3496,21 @@ app.get('/api/reports/batch-commodity', async (req, res) => {
     // Exécution de la requête
     const [results] = await connection.query(query, queryParams);
     
-    // Si aucun résultat, renvoyer un tableau vide plutôt que null
-    if (!results || results.length === 0) {
-      return res.json([]);
-    }
+    // Toujours renvoyer un tableau, même vide
+    // Assurer que les noms des champs correspondent à ce que le frontend attend
+    const formattedResults = (results || []).map(item => ({
+      activity: item.activity || '',
+      batchNumber: item.batchNumber || '',
+      specificCommodity: item.specificCommodity || '',
+      sentTonnage: Number(item.sentTonnage) || 0,
+      internalMovement: Number(item.internalMovement) || 0,
+      receivedTonnage: Number(item.receivedTonnage) || 0,
+      returnedQuantity: Number(item.returnedQuantity) || 0,
+      losses: Number(item.losses) || 0,
+      location: item.location || ''
+    }));
     
-    res.json(results);
+    res.json(formattedResults);
   } catch (error) {
     console.error('Erreur lors de la génération du rapport par lot et commodité:', error);
     res.status(500).json({ error: 'Erreur lors de la génération du rapport' });
